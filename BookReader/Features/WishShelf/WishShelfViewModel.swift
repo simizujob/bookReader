@@ -4,6 +4,9 @@ import Foundation
 @MainActor
 final class WishShelfViewModel: ObservableObject {
     @Published private(set) var seriesCards: [SeriesProgress] = []
+    /// シリーズ名が未確定のまま「気になるリストへ」で追加された単発の本
+    /// （買う前チェックからの登録直後はseriesName未確定のことが多い）。
+    @Published private(set) var standaloneBooks: [Book] = []
     @Published var errorMessage: String?
 
     private let calculator: SeriesProgressCalculating
@@ -21,6 +24,7 @@ final class WishShelfViewModel: ObservableObject {
     func reload() {
         do {
             seriesCards = try calculator.calculateAll()
+            standaloneBooks = try calculator.standaloneWishlistBooks()
         } catch {
             errorMessage = "読み込みに失敗しました"
         }
@@ -34,5 +38,13 @@ final class WishShelfViewModel: ObservableObject {
         }
         let volume = series.nextVolumeToBuy ?? 1
         return affiliateLinkService.amazonSearchURL(keywords: "\(series.seriesName) \(volume)巻")
+    }
+
+    /// 単発の気になる本用。ISBNが分かっているのでそのまま検索する。
+    func openStoreSearch(for book: Book) -> URL {
+        if let isbn = book.isbn {
+            return affiliateLinkService.amazonSearchURL(isbn: isbn)
+        }
+        return affiliateLinkService.amazonSearchURL(keywords: book.title)
     }
 }

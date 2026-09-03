@@ -19,8 +19,28 @@ struct WishShelfView: View {
 
     var body: some View {
         NavigationStack {
-            List(viewModel.seriesCards) { series in
-                seriesCard(series)
+            List {
+                if !viewModel.standaloneBooks.isEmpty {
+                    Section("気になる本") {
+                        ForEach(viewModel.standaloneBooks) { book in
+                            standaloneRow(book)
+                        }
+                    }
+                }
+                if !viewModel.seriesCards.isEmpty {
+                    Section("シリーズ") {
+                        ForEach(viewModel.seriesCards) { series in
+                            seriesCard(series)
+                        }
+                    }
+                }
+                if viewModel.standaloneBooks.isEmpty && viewModel.seriesCards.isEmpty {
+                    ContentUnavailableView(
+                        "気になる本はまだありません",
+                        systemImage: "bookmark",
+                        description: Text("「買う前チェック」で未所持の本を「気になるリストへ」追加すると、ここに表示されます。")
+                    )
+                }
             }
             .listStyle(.plain)
             .navigationTitle("気になる本棚")
@@ -34,6 +54,23 @@ struct WishShelfView: View {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+    }
+
+    private func standaloneRow(_ book: Book) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(book.title).font(.headline)
+                if let isbn = book.isbn {
+                    Text(isbn).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button("探す") {
+                safariURL = IdentifiableURL(url: viewModel.openStoreSearch(for: book))
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.vertical, 4)
     }
 
     private func seriesCard(_ series: SeriesProgress) -> some View {

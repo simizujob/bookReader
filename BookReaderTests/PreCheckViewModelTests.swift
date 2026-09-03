@@ -18,7 +18,7 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.scanState, .judged(.owned(book)))
     }
 
-    func test_judge_unknownISBN_immediatelyNotOwnedWithoutEnrichment() {
+    func test_judge_unknownISBN_immediatelyShowsFallbackTitleWithoutEnrichment() {
         let repository = MockBookRepository()
         let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
 
@@ -27,6 +27,53 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.scanState, .judged(.notOwned(possibleEdition: nil)))
         // バーコード単独ではタイトルが未知のため、この時点ではeditionWarning等は設定されない
         XCTAssertNil(viewModel.enrichedContext.editionWarning)
+        // Open Libraryの応答を待たず、ISBNそのものが即座に仮タイトルとして表示される
+        // （画面下部に「スキャンした本」が必ず表示されるようにするための対応）
+        XCTAssertEqual(viewModel.enrichedContext.title, "ISBN: 9789999999999")
+        XCTAssertFalse(viewModel.enrichedContext.isResolvedFromAPI)
+    }
+
+    func test_judge_unknownISBN_openLibraryHasNoData_keepsFallbackTitleAfterEnrichment() async throws {
+        // Open Libraryが日本の書籍を収載しておらずnotFoundになるケース
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        await viewModel.enrichmentTask?.value
+
+        XCTAssertEqual(viewModel.enrichedContext.title, "ISBN: 9789999999999")
+        XCTAssertFalse(viewModel.enrichedContext.isResolvedFromAPI)
+    }
+
+    func test_addCurrentResultToWishlist_openLibraryHasNoData_registersWithFallbackTitleAndMetadataFetchedFalse() async throws {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        await viewModel.enrichmentTask?.value
+        viewModel.addCurrentResultToWishlist()
+
+        let draft = try XCTUnwrap(repository.insertedDrafts.first)
+        XCTAssertEqual(draft.title, "ISBN: 9789999999999")
+        XCTAssertNil(draft.seriesName)
+        XCTAssertFalse(draft.metadataFetched, "未取得のまま登録された本は後でバックフィルされるようmetadataFetched=falseにする必要がある")
+    }
+
+    func test_addCurrentResultToWishlist_openLibraryResolves_parsesSeriesAndVolume() async throws {
+        let repository = MockBookRepository()
+        let openLibrary = MockOpenLibraryService()
+        openLibrary.metadataByISBN["9782222222222"] = OpenLibraryBookMetadata(title: "鬼滅の刃 20", coverImageURL: nil)
+
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+        viewModel.judge(isbn: "9782222222222")
+        await viewModel.enrichmentTask?.value
+        viewModel.addCurrentResultToWishlist()
+
+        let draft = try XCTUnwrap(repository.insertedDrafts.first)
+        XCTAssertEqual(draft.title, "鬼滅の刃 20")
+        XCTAssertEqual(draft.seriesName, "鬼滅の刃")
+        XCTAssertEqual(draft.volumeNumber, 20)
+        XCTAssertTrue(draft.metadataFetched)
     }
 
     func test_judge_unknownISBN_afterMetadataResolves_detectsEditionWarning() async throws {

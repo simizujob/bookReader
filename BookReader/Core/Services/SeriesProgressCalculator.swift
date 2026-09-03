@@ -2,6 +2,10 @@ import Foundation
 
 protocol SeriesProgressCalculating {
     func calculateAll() throws -> [SeriesProgress]
+    /// シリーズ名が判明しなかった（seriesKeyがnilの）気になるリスト登録本。
+    /// F-02の「気になるリストへ」はタイトル・シリーズ名未確定のまま登録されることが多いため、
+    /// calculateAll()のシリーズカードだけでは表示漏れが起きる（気になる本棚に何も表示されない不具合の原因）。
+    func standaloneWishlistBooks() throws -> [Book]
 }
 
 /// シリーズ完結率の算出（F-05）。詳細設計書4.2参照。
@@ -57,6 +61,12 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
         }
 
         return results.sorted { $0.seriesName < $1.seriesName }
+    }
+
+    func standaloneWishlistBooks() throws -> [Book] {
+        try bookRepository.fetchAll()
+            .filter { $0.status == .wishlist && $0.seriesKey == nil }
+            .sorted { $0.registeredAt > $1.registeredAt }
     }
 
     /// キャッシュの再取得が必要な（未取得、または30日以上古い）シリーズキー一覧。

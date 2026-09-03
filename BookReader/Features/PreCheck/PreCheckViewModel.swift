@@ -22,6 +22,9 @@ final class PreCheckViewModel: ObservableObject {
         var coverImageURL: String?
         var editionWarning: FuzzyMatchResult?
         var partialSeriesInfo: PartialSeriesInfo?
+        /// trueならtitleはOpen Libraryから正式に取得できたもの。falseなら「ISBN: xxx」の仮表示のみ。
+        /// （Open Libraryは日本の書籍を収載していないことが多く、その場合はfalseのまま残る）
+        var isResolvedFromAPI = false
     }
 
     @Published private(set) var scanState: ScanState = .scanning
@@ -63,15 +66,18 @@ final class PreCheckViewModel: ObservableObject {
     func addCurrentResultToWishlist() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
         let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
+        // APIから正式なタイトルが取れている場合のみ、シリーズ名・巻数を分解して登録する
+        // （TitleParserの共通ロジック。F-01/バックフィルと同じ扱い）。
+        let parsed = enrichedContext.isResolvedFromAPI ? TitleParser.parse(title) : nil
         guard (try? bookRepository.insert(BookDraft(
             isbn: lastISBN,
             title: title,
-            seriesName: nil,
-            volumeNumber: nil,
+            seriesName: parsed?.seriesName,
+            volumeNumber: parsed?.volumeNumber,
             coverImageURL: enrichedContext.coverImageURL,
             status: .wishlist,
             readStatus: .unread,
-            metadataFetched: enrichedContext.title != nil
+            metadataFetched: enrichedContext.isResolvedFromAPI
         ))) != nil else { return }
         didAddToWishlist = true
     }
@@ -100,6 +106,10 @@ final class PreCheckViewModel: ObservableObject {
         scanState = .judged(result)
 
         if case .notOwned = result {
+            // Open LibraryはISBN未収載のことが多い（日本の書籍は網羅性が低い）ため、
+            // API取得を待たず、まずISBNそのものを仮タイトルとして即時表示する。
+            // 取得に成功すればenrichAfterMetadataが正式なタイトル・表紙で上書きする。
+            enrichedContext = EnrichedContext(title: "ISBN: \(isbn)")
             enrichmentTask = Task { await enrichAfterMetadata(isbn: isbn) }
         }
     }
@@ -120,7 +130,7 @@ final class PreCheckViewModel: ObservableObject {
         guard let meta = try? await openLibraryService.fetchMetadata(isbn: isbn) else { return }
         guard lastISBN == isbn else { return } // 別の本をスキャンしていたら結果を捨てる
 
-        var context = EnrichedContext(title: meta.title, coverImageURL: meta.coverImageURL)
+        var context = EnrichedContext(title: meta.title, coverImageURL: meta.coverImageURL, isResolvedFromAPI: true)
 
         if let edition = try? bookRepository.fuzzyMatch(title: meta.title, excludingISBN: isbn) {
             context.editionWarning = edition
