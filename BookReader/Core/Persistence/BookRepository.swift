@@ -89,7 +89,7 @@ final class CoreDataBookRepository: BookRepository {
 
     func judge(isbn: String) throws -> JudgeResult {
         if let existing = try find(isbn: isbn), existing.status == .owned {
-            return .owned
+            return .owned(existing)
         }
         // このISBN単独ではタイトルが未知のため、版違い判定はまだ行わない（詳細設計書4.1a）
         return .notOwned(possibleEdition: nil)

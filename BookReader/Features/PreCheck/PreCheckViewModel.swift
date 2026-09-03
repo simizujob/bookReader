@@ -27,6 +27,7 @@ final class PreCheckViewModel: ObservableObject {
     @Published private(set) var scanState: ScanState = .scanning
     @Published private(set) var isLoadingMetadata = false
     @Published private(set) var enrichedContext = EnrichedContext()
+    @Published private(set) var didAddToWishlist = false
     @Published var showManualSearch = false
 
     private var consecutiveDetectionFailures = 0
@@ -62,7 +63,7 @@ final class PreCheckViewModel: ObservableObject {
     func addCurrentResultToWishlist() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
         let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
-        _ = try? bookRepository.insert(BookDraft(
+        guard (try? bookRepository.insert(BookDraft(
             isbn: lastISBN,
             title: title,
             seriesName: nil,
@@ -71,7 +72,8 @@ final class PreCheckViewModel: ObservableObject {
             status: .wishlist,
             readStatus: .unread,
             metadataFetched: enrichedContext.title != nil
-        ))
+        ))) != nil else { return }
+        didAddToWishlist = true
     }
 
     private var lastISBN: String?
@@ -79,9 +81,17 @@ final class PreCheckViewModel: ObservableObject {
     private(set) var enrichmentTask: Task<Void, Never>?
 
     private func onISBNDetected(_ isbn: String) {
+        // カメラが同じ本を映し続けている間、0.4秒間隔で同じISBNが繰り返し検出され続ける。
+        // 既に同じISBNの判定結果を表示中であれば再処理しない（画面のちらつき・
+        // ユーザー操作中の再レンダリングによるタップ取りこぼしを防ぐ）。
+        if isbn == lastISBN, case .judged = scanState {
+            return
+        }
+
         consecutiveDetectionFailures = 0
         lastISBN = isbn
         enrichedContext = EnrichedContext()
+        didAddToWishlist = false
 
         guard let result = try? bookRepository.judge(isbn: isbn) else {
             scanState = .error("判定に失敗しました")
@@ -102,6 +112,7 @@ final class PreCheckViewModel: ObservableObject {
     }
 
     /// judge()で.notOwnedが返った直後に非同期で呼び出す（詳細設計書5.1参照）。
+    /// 画面下部への表示用に、スキャンした本のタイトル・表紙画像もここで補完する。
     private func enrichAfterMetadata(isbn: String) async {
         isLoadingMetadata = true
         defer { isLoadingMetadata = false }

@@ -59,9 +59,9 @@ final class BookRepositoryTests: XCTestCase {
     // MARK: - judge (F-02)
 
     func test_judge_ownedISBN_returnsOwned() throws {
-        try repository.insert(draft(isbn: "9784041031400"))
+        let inserted = try repository.insert(draft(isbn: "9784041031400"))
         let result = try repository.judge(isbn: "9784041031400")
-        XCTAssertEqual(result, .owned)
+        XCTAssertEqual(result, .owned(inserted))
     }
 
     func test_judge_unknownISBN_returnsNotOwnedWithoutEditionGuess() throws {

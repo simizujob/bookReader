@@ -39,7 +39,7 @@ final class MockBookRepository: BookRepository {
 
     func judge(isbn: String) throws -> JudgeResult {
         if let existing = try find(isbn: isbn), existing.status == .owned {
-            return .owned
+            return .owned(existing)
         }
         return .notOwned(possibleEdition: nil)
     }

@@ -5,16 +5,17 @@ import XCTest
 final class PreCheckViewModelTests: XCTestCase {
     func test_judge_ownedISBN_setsJudgedOwned() {
         let repository = MockBookRepository()
-        repository.seed(Book(
+        let book = Book(
             id: UUID(), isbn: "9784041031400", title: "三体", seriesName: nil, seriesKey: nil,
             volumeNumber: nil, coverImageURL: nil, status: .owned, readStatus: .unread,
             registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
-        ))
+        )
+        repository.seed(book)
         let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9784041031400")
 
-        XCTAssertEqual(viewModel.scanState, .judged(.owned))
+        XCTAssertEqual(viewModel.scanState, .judged(.owned(book)))
     }
 
     func test_judge_unknownISBN_immediatelyNotOwnedWithoutEnrichment() {
@@ -86,5 +87,62 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertEqual(repository.insertedDrafts.count, 1)
         XCTAssertEqual(repository.insertedDrafts.first?.status, .wishlist)
         XCTAssertEqual(repository.insertedDrafts.first?.isbn, "9789999999999")
+    }
+
+    func test_addCurrentResultToWishlist_setsDidAddToWishlistForUIFeedback() {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        XCTAssertFalse(viewModel.didAddToWishlist)
+
+        viewModel.addCurrentResultToWishlist()
+        XCTAssertTrue(viewModel.didAddToWishlist)
+    }
+
+    func test_addCurrentResultToWishlist_withoutPriorJudgment_doesNothing() {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+
+        viewModel.addCurrentResultToWishlist()
+
+        XCTAssertTrue(repository.insertedDrafts.isEmpty)
+        XCTAssertFalse(viewModel.didAddToWishlist)
+    }
+
+    /// 不具合修正の回帰テスト: カメラが同じ本を映し続けている間、同一ISBNが繰り返し検出されても
+    /// enrichedContextやdidAddToWishlistが再リセットされず、ユーザー操作（追加ボタンのタップ）の
+    /// 結果が上書きされないこと。
+    func test_repeatedSameISBNDetection_doesNotResetStateOrLoseWishlistFeedback() async throws {
+        let repository = MockBookRepository()
+        let openLibrary = MockOpenLibraryService()
+        openLibrary.metadataByISBN["9789999999999"] = OpenLibraryBookMetadata(title: "三体", coverImageURL: nil)
+
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+
+        viewModel.judge(isbn: "9789999999999")
+        await viewModel.enrichmentTask?.value
+        viewModel.addCurrentResultToWishlist()
+        XCTAssertTrue(viewModel.didAddToWishlist)
+
+        // カメラが同じ本を映し続け、同一ISBNが再度検出されるシミュレーション
+        viewModel.judge(isbn: "9789999999999")
+
+        XCTAssertTrue(viewModel.didAddToWishlist, "同一ISBNの再検出で追加済みフィードバックが消えてはいけない")
+        XCTAssertEqual(viewModel.enrichedContext.title, "三体", "同一ISBNの再検出でスキャン結果表示が消えてはいけない")
+        XCTAssertEqual(repository.insertedDrafts.count, 1, "同一ISBNの再検出で重複登録されてはいけない")
+    }
+
+    func test_differentISBNDetection_resetsStateAndWishlistFeedback() {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        viewModel.addCurrentResultToWishlist()
+        XCTAssertTrue(viewModel.didAddToWishlist)
+
+        viewModel.judge(isbn: "9788888888888")
+
+        XCTAssertFalse(viewModel.didAddToWishlist)
     }
 }

@@ -396,6 +396,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BookReader/Preview Content\"";
+				DEVELOPMENT_TEAM = 59B5C482UW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "バーコードや背表紙をスキャンして本を登録・判定するためにカメラを使用します。";
@@ -426,6 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BookReader/Preview Content\"";
+				DEVELOPMENT_TEAM = 59B5C482UW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "バーコードや背表紙をスキャンして本を登録・判定するためにカメラを使用します。";
