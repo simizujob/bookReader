@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23605" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="BookEntity" representedClassName="BookEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="coverImageURL" optional="YES" attributeType="String"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isbn" optional="YES" attributeType="String"/>
+        <attribute name="lastOpenedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="metadataFetched" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="readStatus" attributeType="String" defaultValueString="unread"/>
+        <attribute name="registeredAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="seriesKey" optional="YES" attributeType="String"/>
+        <attribute name="seriesName" optional="YES" attributeType="String"/>
+        <attribute name="status" attributeType="String" defaultValueString="owned"/>
+        <attribute name="title" attributeType="String" defaultValueString=""/>
+        <attribute name="volumeNumber" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="SeriesMetadataCacheEntity" representedClassName="SeriesMetadataCacheEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="knownTotalVolumes" optional="YES" attributeType="Integer 32" usesScalarValueType="NO"/>
+        <attribute name="lastFetchedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="seriesKey" attributeType="String" defaultValueString=""/>
+    </entity>
+</model>
