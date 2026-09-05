@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		34CDAAC43F9C55F572A4A5FB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17E5052CC0C5AC9989FF8CAD /* Foundation.framework */; };
+		69B09228F7FFAD95A0FB9193 /* BookReaderShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D9860C4994D1E6532E57DD3 /* BookReaderShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0B21DD443049C9840055F2C9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +26,61 @@
 			remoteGlobalIDString = 0B21DD323049C9830055F2C9;
 			remoteInfo = BookReader;
 		};
+		22794B8EF493391531C5B507 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0B21DD2B3049C9830055F2C9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4644102E3F2560C2E692B82F;
+			remoteInfo = BookReaderShareExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		48B0F0B73E7547834B8B5068 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				69B09228F7FFAD95A0FB9193 /* BookReaderShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0B21DD333049C9830055F2C9 /* BookReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B21DD433049C9840055F2C9 /* BookReaderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BookReaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B21DD4D3049C9840055F2C9 /* BookReaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BookReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		17E5052CC0C5AC9989FF8CAD /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		2D9860C4994D1E6532E57DD3 /* BookReaderShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BookReaderShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C0DF1DAE025733BAAFDCC6FA /* Exceptions for "BookReaderShareExtension" folder in "BookReaderShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4644102E3F2560C2E692B82F /* BookReaderShareExtension */;
+		};
+		FBF35BF17464F33B31B6A011 /* Exceptions for "BookReader" folder in "BookReaderShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				BookReaderApp.swift,
+				RootView.swift,
+			);
+			target = 4644102E3F2560C2E692B82F /* BookReaderShareExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0B21DD353049C9830055F2C9 /* BookReader */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				FBF35BF17464F33B31B6A011 /* Exceptions for "BookReader" folder in "BookReaderShareExtension" target */,
+			);
 			path = BookReader;
 			sourceTree = "<group>";
 		};
@@ -43,6 +92,14 @@
 		0B21DD503049C9840055F2C9 /* BookReaderUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = BookReaderUITests;
+			sourceTree = "<group>";
+		};
+		79B5F12AFB33AFA02D63146C /* BookReaderShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C0DF1DAE025733BAAFDCC6FA /* Exceptions for "BookReaderShareExtension" folder in "BookReaderShareExtension" target */,
+			);
+			path = BookReaderShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +126,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB89C50E048DEBE2C2D3C2A3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34CDAAC43F9C55F572A4A5FB /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -79,6 +144,8 @@
 				0B21DD463049C9840055F2C9 /* BookReaderTests */,
 				0B21DD503049C9840055F2C9 /* BookReaderUITests */,
 				0B21DD343049C9830055F2C9 /* Products */,
+				3AA345F56EADE80312290BCE /* Frameworks */,
+				79B5F12AFB33AFA02D63146C /* BookReaderShareExtension */,
 			);
 			sourceTree = "<group>";
 		};
@@ -88,8 +155,25 @@
 				0B21DD333049C9830055F2C9 /* BookReader.app */,
 				0B21DD433049C9840055F2C9 /* BookReaderTests.xctest */,
 				0B21DD4D3049C9840055F2C9 /* BookReaderUITests.xctest */,
+				2D9860C4994D1E6532E57DD3 /* BookReaderShareExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3AA345F56EADE80312290BCE /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				4D39FA4CC03EF7C5B3EF5944 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		4D39FA4CC03EF7C5B3EF5944 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				17E5052CC0C5AC9989FF8CAD /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,17 +186,17 @@
 				0B21DD2F3049C9830055F2C9 /* Sources */,
 				0B21DD303049C9830055F2C9 /* Frameworks */,
 				0B21DD313049C9830055F2C9 /* Resources */,
+				48B0F0B73E7547834B8B5068 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				339D8D38CFC3FA28E782A1AB /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0B21DD353049C9830055F2C9 /* BookReader */,
 			);
 			name = BookReader;
-			packageProductDependencies = (
-			);
 			productName = BookReader;
 			productReference = 0B21DD333049C9830055F2C9 /* BookReader.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +218,6 @@
 				0B21DD463049C9840055F2C9 /* BookReaderTests */,
 			);
 			name = BookReaderTests;
-			packageProductDependencies = (
-			);
 			productName = BookReaderTests;
 			productReference = 0B21DD433049C9840055F2C9 /* BookReaderTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,11 +239,30 @@
 				0B21DD503049C9840055F2C9 /* BookReaderUITests */,
 			);
 			name = BookReaderUITests;
-			packageProductDependencies = (
-			);
 			productName = BookReaderUITests;
 			productReference = 0B21DD4D3049C9840055F2C9 /* BookReaderUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		4644102E3F2560C2E692B82F /* BookReaderShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E18D29C4885E71C8E0756DE4 /* Build configuration list for PBXNativeTarget "BookReaderShareExtension" */;
+			buildPhases = (
+				13B087B44B64E1AFED3A36EA /* Sources */,
+				BB89C50E048DEBE2C2D3C2A3 /* Frameworks */,
+				44D6F07C0AF303DF635BFC6D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0B21DD353049C9830055F2C9 /* BookReader */,
+				79B5F12AFB33AFA02D63146C /* BookReaderShareExtension */,
+			);
+			name = BookReaderShareExtension;
+			productName = BookReaderShareExtension;
+			productReference = 2D9860C4994D1E6532E57DD3 /* BookReaderShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -203,6 +304,7 @@
 				0B21DD323049C9830055F2C9 /* BookReader */,
 				0B21DD423049C9840055F2C9 /* BookReaderTests */,
 				0B21DD4C3049C9840055F2C9 /* BookReaderUITests */,
+				4644102E3F2560C2E692B82F /* BookReaderShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +325,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0B21DD4B3049C9840055F2C9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		44D6F07C0AF303DF635BFC6D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +362,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		13B087B44B64E1AFED3A36EA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +381,12 @@
 			isa = PBXTargetDependency;
 			target = 0B21DD323049C9830055F2C9 /* BookReader */;
 			targetProxy = 0B21DD4E3049C9840055F2C9 /* PBXContainerItemProxy */;
+		};
+		339D8D38CFC3FA28E782A1AB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = BookReaderShareExtension;
+			target = 4644102E3F2560C2E692B82F /* BookReaderShareExtension */;
+			targetProxy = 22794B8EF493391531C5B507 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -393,6 +515,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BookReader/BookReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BookReader/Preview Content\"";
@@ -424,6 +547,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BookReader/BookReader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"BookReader/Preview Content\"";
@@ -518,6 +642,53 @@
 			};
 			name = Release;
 		};
+		586C67022C6D6F5AAF7614A3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BookReaderShareExtension/BookReaderShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 59B5C482UW;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BookReaderShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "積読レーダーで買う前チェック";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = simizuatusi.com.BookReader.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		837166C53024529F8142EB7F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BookReaderShareExtension/BookReaderShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 59B5C482UW;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BookReaderShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "積読レーダーで買う前チェック";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = simizuatusi.com.BookReader.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -553,6 +724,15 @@
 			buildConfigurations = (
 				0B21DD5E3049C9840055F2C9 /* Debug */,
 				0B21DD5F3049C9840055F2C9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E18D29C4885E71C8E0756DE4 /* Build configuration list for PBXNativeTarget "BookReaderShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				837166C53024529F8142EB7F /* Release */,
+				586C67022C6D6F5AAF7614A3 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
