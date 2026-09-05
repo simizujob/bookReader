@@ -229,6 +229,23 @@ final class NDLSearchServiceTests: XCTestCase {
         """
     }
 
+    /// 回帰テスト: 実際に確認したケース（"ONE PIECE"というタイトルが服飾・学術文献等の
+    /// 無関係な文献と大量に被り、絞り込みなしでは200件の枠内に単行本が1件もヒットしない）。
+    /// NDLの分類コード（NDC）で漫画区分「726.1」に絞り込むクエリを送っていることを確認する。
+    func test_fetchSeriesVolumeCount_includesMangaNDCFilterInQuery() async throws {
+        var capturedURL: URL?
+        StubURLProtocol.responseProvider = { url in
+            capturedURL = url
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Self.notFoundResponseXML.data(using: .utf8)!, response)
+        }
+        let service = NDLSearchService(session: StubURLProtocol.makeSession())
+        _ = try? await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+
+        let queryItems = URLComponents(url: try XCTUnwrap(capturedURL), resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(queryItems?.first { $0.name == "ndc" }?.value, "726.1")
+    }
+
     func test_fetchSeriesVolumeCount_noGaps_returnsMaxVolume() async throws {
         // 実際に確認した鬼滅の刃（1〜23巻、欠番なし）のケースを模したデータ
         let items = (1...23).map { FixtureItem(title: "鬼滅の刃", volume: String($0)) }

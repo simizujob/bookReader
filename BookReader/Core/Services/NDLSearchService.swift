@@ -79,6 +79,11 @@ final class NDLSearchService: BookMetadataFetching {
     /// 異体字などの表記ゆれが原因で、プログラム的に正しいクエリを組み立てられないことを確認済み）。
     /// 絞り込みなしでは1ページ（最大200件）に無関係な関連商品が混ざり、本来の巻が
     /// 歯抜けで取得されることがある（例: 1,10〜17巻しか取れず本来23巻あるようなケース）。
+    /// 特にタイトルが一般的な単語と被る作品（"ONE PIECE"＝洋服の意でもある等）では、
+    /// 200件の枠が無関係な文献で埋まり単行本が1件もヒットしないことを実データで確認した。
+    /// このアプリはF-05を漫画のみ対象としている（要件定義書参照）ため、NDLの分類コード
+    /// （NDC）で漫画区分「726.1」に絞り込むことで、無関係な文献・関連グッズ・アニメ円盤等を
+    /// 大幅に除外できる（実データで検証済み。この絞り込みだけで既刊数の精度が大きく改善した）。
     ///
     /// 既刊総数は**1巻から連続して確認できた最大巻**を採用する（例: 1〜16巻が確認でき17巻だけ
     /// 欠けている場合は16を返す）。18巻のように欠番の先に単発でヒットする巻は、そのISBNだけ
@@ -95,6 +100,7 @@ final class NDLSearchService: BookMetadataFetching {
         }
         components.queryItems = [
             URLQueryItem(name: "title", value: queryTitle),
+            URLQueryItem(name: "ndc", value: "726.1"),
             URLQueryItem(name: "cnt", value: "200")
         ]
         guard let url = components.url, let data = try? await fetchData(from: url) else { return nil }
