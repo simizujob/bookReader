@@ -69,42 +69,17 @@ final class PreCheckViewModel: ObservableObject {
     /// 未登録の本を気になるリストへ登録し、次のスキャンへ進む。
     func addToWishlistAndContinueScanning() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
-        let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
-
-        // 既刊数が判明したシリーズは未登録の巻をISBN未確定のプレースホルダーとして
-        // 自動登録している（SeriesVolumeCountRefreshService）。同じ巻を実際にスキャンした場合、
-        // 新規登録せずそのプレースホルダーを実データで更新する（重複登録の防止）。
-        if let seriesName = enrichedContext.seriesName,
-           let volumeNumber = enrichedContext.volumeNumber,
-           let placeholder = try? bookRepository.find(
-               seriesKey: SeriesKeyNormalizer.normalize(seriesName),
-               volumeNumber: volumeNumber
-           ),
-           placeholder.isbn == nil {
-            _ = try? bookRepository.update(
-                id: placeholder.id,
-                changes: BookChanges(
-                    title: title,
-                    seriesName: seriesName,
-                    volumeNumber: volumeNumber,
-                    isbn: lastISBN,
-                    coverImageURL: enrichedContext.coverImageURL,
-                    status: .wishlist,
-                    readStatus: placeholder.readStatus
-                )
-            )
-        } else {
-            _ = try? bookRepository.insert(BookDraft(
+        WishlistRegistrar.register(
+            WishlistRegistrar.Entry(
                 isbn: lastISBN,
-                title: title,
+                title: enrichedContext.title ?? "ISBN: \(lastISBN)",
                 seriesName: enrichedContext.seriesName,
                 volumeNumber: enrichedContext.volumeNumber,
                 coverImageURL: enrichedContext.coverImageURL,
-                status: .wishlist,
-                readStatus: .unread,
                 metadataFetched: enrichedContext.isResolvedFromAPI
-            ))
-        }
+            ),
+            bookRepository: bookRepository
+        )
         resetForNextScan()
     }
 
