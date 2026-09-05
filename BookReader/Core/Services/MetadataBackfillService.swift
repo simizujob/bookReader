@@ -27,7 +27,7 @@ struct MetadataBackfillService: MetadataBackfilling {
         for book in pending {
             guard let isbn = book.isbn else { continue }
             if let meta = try? await metadataService.fetchMetadata(isbn: isbn) {
-                try? bookRepository.applyMetadata(id: book.id, title: meta.title, coverImageURL: meta.coverImageURL)
+                try? bookRepository.applyMetadata(id: book.id, metadata: meta)
             }
             try? await Task.sleep(nanoseconds: interRequestDelayNanoseconds)
         }

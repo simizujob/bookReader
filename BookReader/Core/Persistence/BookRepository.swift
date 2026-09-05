@@ -24,7 +24,7 @@ protocol BookRepository {
     @discardableResult func insertBatch(_ drafts: [BookDraft]) throws -> [Book]
     @discardableResult func update(id: UUID, changes: BookChanges) throws -> Book
     func delete(id: UUID) throws
-    func applyMetadata(id: UUID, title: String, coverImageURL: String?) throws
+    func applyMetadata(id: UUID, metadata: BookMetadata) throws
 }
 
 /// CoreData実装。詳細設計書4.1参照。
@@ -186,17 +186,17 @@ final class CoreDataBookRepository: BookRepository {
         }
     }
 
-    func applyMetadata(id: UUID, title: String, coverImageURL: String?) throws {
+    func applyMetadata(id: UUID, metadata: BookMetadata) throws {
         try context.performAndWait {
             guard let entity = try findEntity(id: id) else {
                 throw PersistenceError.notFound(id)
             }
-            let parsed = TitleParser.parse(title)
-            entity.title = parsed.title
-            entity.coverImageURL = coverImageURL
-            entity.seriesName = parsed.seriesName
-            entity.seriesKey = parsed.seriesName.map { SeriesKeyNormalizer.normalize($0) }
-            entity.volumeNumber = parsed.volumeNumber.map { NSNumber(value: $0) }
+            let resolved = metadata.resolvedSeriesInfo
+            entity.title = metadata.title
+            entity.coverImageURL = metadata.coverImageURL
+            entity.seriesName = resolved.seriesName
+            entity.seriesKey = resolved.seriesName.map { SeriesKeyNormalizer.normalize($0) }
+            entity.volumeNumber = resolved.volumeNumber.map { NSNumber(value: $0) }
             entity.metadataFetched = true
             try save()
         }

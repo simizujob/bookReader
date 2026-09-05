@@ -179,13 +179,45 @@ final class BookRepositoryTests: XCTestCase {
                 metadataFetched: false
             )
         )
-        try repository.applyMetadata(id: book.id, title: "鬼滅の刃 19", coverImageURL: "https://example.com/cover.jpg")
+        try repository.applyMetadata(
+            id: book.id,
+            metadata: BookMetadata(title: "鬼滅の刃 19", coverImageURL: "https://example.com/cover.jpg")
+        )
 
         let updated = try repository.find(id: book.id)
         XCTAssertEqual(updated?.seriesName, "鬼滅の刃")
         XCTAssertEqual(updated?.volumeNumber, 19)
         XCTAssertEqual(updated?.seriesKey, SeriesKeyNormalizer.normalize("鬼滅の刃"))
         XCTAssertEqual(updated?.metadataFetched, true)
+    }
+
+    /// NDL Search等、シリーズ名・巻数を構造化フィールドで提供するデータソースの場合は
+    /// TitleParserの推定より構造化データを優先すること。
+    func test_applyMetadata_prefersStructuredSeriesInfoOverTitleParsing() throws {
+        let book = try repository.insert(
+            BookDraft(
+                isbn: "9784081135684",
+                title: "ISBN: 9784081135684",
+                seriesName: nil,
+                volumeNumber: nil,
+                coverImageURL: nil,
+                status: .owned,
+                readStatus: .unread,
+                metadataFetched: false
+            )
+        )
+        try repository.applyMetadata(
+            id: book.id,
+            metadata: BookMetadata(
+                title: "Hunter×hunter 5",
+                seriesName: "Hunter×hunter",
+                volumeNumber: 5
+            )
+        )
+
+        let updated = try repository.find(id: book.id)
+        XCTAssertEqual(updated?.seriesName, "Hunter×hunter")
+        XCTAssertEqual(updated?.volumeNumber, 5)
     }
 
     func test_fetchPendingMetadata_returnsOnlyUnfetchedBooks() throws {

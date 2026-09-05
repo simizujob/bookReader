@@ -87,12 +87,12 @@ final class ScanRegisterViewModel: ObservableObject {
                 ))
             } else if let isbn = candidate.isbn {
                 if let meta = try? await metadataService.fetchMetadata(isbn: isbn) {
-                    let parsed = TitleParser.parse(meta.title)
+                    let resolved = meta.resolvedSeriesInfo
                     drafts.append(BookDraft(
                         isbn: isbn,
-                        title: parsed.title,
-                        seriesName: parsed.seriesName,
-                        volumeNumber: parsed.volumeNumber,
+                        title: meta.title,
+                        seriesName: resolved.seriesName,
+                        volumeNumber: resolved.volumeNumber,
                         coverImageURL: meta.coverImageURL,
                         status: .owned,
                         readStatus: .unread,

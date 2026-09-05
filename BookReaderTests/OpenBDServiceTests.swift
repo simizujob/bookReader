@@ -29,6 +29,18 @@ final class OpenBDServiceTests: XCTestCase {
         let metadata = try await service.fetchMetadata(isbn: "9784785982737")
         XCTAssertEqual(metadata.title, "みんなの食卓　わたしのおにぎり")
         XCTAssertNil(metadata.coverImageURL, "この実データでは表紙URLが空文字のためnilになること")
+        XCTAssertEqual(metadata.seriesName, "ぐる漫")
+        XCTAssertNil(metadata.volumeNumber, "この実データではvolumeが空文字のためnilになること")
+    }
+
+    func test_fetchMetadata_seriesAndVolumePresent_areParsed() async throws {
+        let json = """
+        [{"summary":{"isbn":"9784088725093","title":"ONE PIECE","volume":"1","series":"ONE PIECE","cover":""}}]
+        """
+        let service = makeService(json: json)
+        let metadata = try await service.fetchMetadata(isbn: "9784088725093")
+        XCTAssertEqual(metadata.seriesName, "ONE PIECE")
+        XCTAssertEqual(metadata.volumeNumber, 1)
     }
 
     func test_fetchMetadata_notFoundResponse_throwsNotFound() async throws {

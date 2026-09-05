@@ -76,6 +76,27 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertTrue(draft.metadataFetched)
     }
 
+    /// NDL Search等、シリーズ名・巻数を構造化フィールドで返すデータソースの場合は
+    /// タイトル文字列の推定（TitleParser）を経由せず、構造化データをそのまま使うこと。
+    func test_addCurrentResultToWishlist_structuredMetadata_usesStructuredSeriesInfoDirectly() async throws {
+        let repository = MockBookRepository()
+        let metadataSource = MockOpenLibraryService()
+        metadataSource.metadataByISBN["9784081135684"] = BookMetadata(
+            title: "Hunter×hunter 5",
+            seriesName: "Hunter×hunter",
+            volumeNumber: 5
+        )
+
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: metadataSource)
+        viewModel.judge(isbn: "9784081135684")
+        await viewModel.enrichmentTask?.value
+        viewModel.addCurrentResultToWishlist()
+
+        let draft = try XCTUnwrap(repository.insertedDrafts.first)
+        XCTAssertEqual(draft.seriesName, "Hunter×hunter")
+        XCTAssertEqual(draft.volumeNumber, 5)
+    }
+
     func test_judge_unknownISBN_afterMetadataResolves_detectsEditionWarning() async throws {
         let repository = MockBookRepository()
         // 単行本を所持している状態で、文庫版（別ISBN）をスキャンするケース

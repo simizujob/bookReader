@@ -20,10 +20,12 @@ final class PreCheckViewModel: ObservableObject {
     struct EnrichedContext: Equatable {
         var title: String?
         var coverImageURL: String?
+        var seriesName: String?
+        var volumeNumber: Int?
         var editionWarning: FuzzyMatchResult?
         var partialSeriesInfo: PartialSeriesInfo?
-        /// trueならtitleはAPI（openBD優先／Open Libraryフォールバック）から正式に取得できたもの。
-        /// falseなら「ISBN: xxx」の仮表示のみ（どちらのAPIにも当該ISBNの収載がなかった場合）。
+        /// trueならtitleはAPI（NDL Search／openBD／Open Libraryのいずれか）から正式に取得できたもの。
+        /// falseなら「ISBN: xxx」の仮表示のみ（どのAPIにも当該ISBNの収載がなかった場合）。
         var isResolvedFromAPI = false
     }
 
@@ -66,14 +68,11 @@ final class PreCheckViewModel: ObservableObject {
     func addCurrentResultToWishlist() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
         let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
-        // APIから正式なタイトルが取れている場合のみ、シリーズ名・巻数を分解して登録する
-        // （TitleParserの共通ロジック。F-01/バックフィルと同じ扱い）。
-        let parsed = enrichedContext.isResolvedFromAPI ? TitleParser.parse(title) : nil
         guard (try? bookRepository.insert(BookDraft(
             isbn: lastISBN,
             title: title,
-            seriesName: parsed?.seriesName,
-            volumeNumber: parsed?.volumeNumber,
+            seriesName: enrichedContext.seriesName,
+            volumeNumber: enrichedContext.volumeNumber,
             coverImageURL: enrichedContext.coverImageURL,
             status: .wishlist,
             readStatus: .unread,
@@ -130,14 +129,20 @@ final class PreCheckViewModel: ObservableObject {
         guard let meta = try? await metadataService.fetchMetadata(isbn: isbn) else { return }
         guard lastISBN == isbn else { return } // 別の本をスキャンしていたら結果を捨てる
 
-        var context = EnrichedContext(title: meta.title, coverImageURL: meta.coverImageURL, isResolvedFromAPI: true)
+        let resolved = meta.resolvedSeriesInfo
+        var context = EnrichedContext(
+            title: meta.title,
+            coverImageURL: meta.coverImageURL,
+            seriesName: resolved.seriesName,
+            volumeNumber: resolved.volumeNumber,
+            isResolvedFromAPI: true
+        )
 
         if let edition = try? bookRepository.fuzzyMatch(title: meta.title, excludingISBN: isbn) {
             context.editionWarning = edition
         }
 
-        let parsed = TitleParser.parse(meta.title)
-        if let seriesName = parsed.seriesName, let volumeNumber = parsed.volumeNumber {
+        if let seriesName = resolved.seriesName, let volumeNumber = resolved.volumeNumber {
             let seriesKey = SeriesKeyNormalizer.normalize(seriesName)
             let owned = (try? bookRepository.fetchAll())?
                 .filter { $0.seriesKey == seriesKey && $0.status == .owned }

@@ -113,17 +113,17 @@ final class MockBookRepository: BookRepository {
         books.remove(at: index)
     }
 
-    func applyMetadata(id: UUID, title: String, coverImageURL: String?) throws {
+    func applyMetadata(id: UUID, metadata: BookMetadata) throws {
         guard let index = books.firstIndex(where: { $0.id == id }) else {
             throw PersistenceError.notFound(id)
         }
-        let parsed = TitleParser.parse(title)
+        let resolved = metadata.resolvedSeriesInfo
         var book = books[index]
-        book.title = parsed.title
-        book.coverImageURL = coverImageURL
-        book.seriesName = parsed.seriesName
-        book.seriesKey = parsed.seriesName.map { SeriesKeyNormalizer.normalize($0) }
-        book.volumeNumber = parsed.volumeNumber
+        book.title = metadata.title
+        book.coverImageURL = metadata.coverImageURL
+        book.seriesName = resolved.seriesName
+        book.seriesKey = resolved.seriesName.map { SeriesKeyNormalizer.normalize($0) }
+        book.volumeNumber = resolved.volumeNumber
         book.metadataFetched = true
         books[index] = book
     }

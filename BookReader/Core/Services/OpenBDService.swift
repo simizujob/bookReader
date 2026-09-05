@@ -52,7 +52,9 @@ final class OpenBDService: BookMetadataFetching {
         }
 
         let cover = (summary["cover"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return BookMetadata(title: title, coverImageURL: cover)
+        let seriesName = (summary["series"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let volumeNumber = (summary["volume"] as? String).flatMap { $0.isEmpty ? nil : Int($0) }
+        return BookMetadata(title: title, coverImageURL: cover, seriesName: seriesName, volumeNumber: volumeNumber)
     }
 
     /// openBDには既刊総数の推定に使えるシリーズ横断検索APIがないため未対応。
