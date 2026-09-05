@@ -65,6 +65,8 @@ final class ShelfViewModel: ObservableObject {
                     title: book.title,
                     seriesName: book.seriesName,
                     volumeNumber: book.volumeNumber,
+                    isbn: book.isbn,
+                    coverImageURL: book.coverImageURL,
                     status: pair.status,
                     readStatus: pair.readStatus
                 )

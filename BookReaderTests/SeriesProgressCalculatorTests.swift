@@ -209,7 +209,10 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         ))
         try repository.update(
             id: vol2.id,
-            changes: BookChanges(title: vol2.title, seriesName: vol2.seriesName, volumeNumber: vol2.volumeNumber, status: .owned, readStatus: .finished)
+            changes: BookChanges(
+                title: vol2.title, seriesName: vol2.seriesName, volumeNumber: vol2.volumeNumber,
+                isbn: vol2.isbn, coverImageURL: vol2.coverImageURL, status: .owned, readStatus: .finished
+            )
         )
 
         let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }

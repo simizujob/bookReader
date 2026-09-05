@@ -14,6 +14,8 @@ final class BookDetailViewModel: ObservableObject {
     @Published private(set) var didDelete = false
 
     private let bookRepository: BookRepository
+    private let isbn: String?
+    private let coverImageURL: String?
 
     init(book: Book, bookRepository: BookRepository) {
         self.bookID = book.id
@@ -23,6 +25,8 @@ final class BookDetailViewModel: ObservableObject {
         self.editableStatus = book.status
         self.editableReadStatus = book.readStatus
         self.bookRepository = bookRepository
+        self.isbn = book.isbn
+        self.coverImageURL = book.coverImageURL
     }
 
     @discardableResult
@@ -34,6 +38,8 @@ final class BookDetailViewModel: ObservableObject {
                     title: editableTitle,
                     seriesName: editableSeriesName.isEmpty ? nil : editableSeriesName,
                     volumeNumber: editableVolumeNumber,
+                    isbn: isbn,
+                    coverImageURL: coverImageURL,
                     status: editableStatus,
                     readStatus: editableReadStatus
                 )

@@ -97,6 +97,57 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertEqual(draft.volumeNumber, 5)
     }
 
+    /// 回帰テスト: 既に同じISBNで登録済み（「気になるリストへ」の連打・再スキャン等）の場合は
+    /// 重複登録しないこと。
+    func test_addCurrentResultToWishlist_alreadyRegisteredSameISBN_doesNotDuplicate() {
+        let repository = MockBookRepository()
+        repository.seed(Book(
+            id: UUID(), isbn: "9789999999999", title: "ISBN: 9789999999999", seriesName: nil, seriesKey: nil,
+            volumeNumber: nil, coverImageURL: nil, status: .wishlist, readStatus: .unread,
+            registeredAt: Date(), lastOpenedAt: nil, metadataFetched: false
+        ))
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        viewModel.addCurrentResultToWishlist()
+
+        XCTAssertTrue(repository.insertedDrafts.isEmpty, "同じISBNの本が既に登録済みなら重複登録しないこと")
+        XCTAssertTrue(viewModel.didAddToWishlist)
+    }
+
+    /// 回帰テスト: 既刊数が判明したシリーズは未登録の巻をISBN未確定のプレースホルダーとして
+    /// 自動登録している（SeriesVolumeCountRefreshService.backfillMissingVolumes）。その巻を
+    /// 実際にスキャンした場合、新規登録して重複させるのではなく、プレースホルダーを
+    /// 実データ（ISBN・表紙画像）で更新すること。
+    func test_addCurrentResultToWishlist_matchesAutoBackfilledPlaceholder_updatesInsteadOfDuplicating() async throws {
+        let repository = MockBookRepository()
+        let placeholder = Book(
+            id: UUID(), isbn: nil, title: "Hunter×hunter 5", seriesName: "Hunter×hunter",
+            seriesKey: SeriesKeyNormalizer.normalize("Hunter×hunter"), volumeNumber: 5, coverImageURL: nil,
+            status: .wishlist, readStatus: .unread, registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        )
+        repository.seed(placeholder)
+
+        let metadataSource = MockOpenLibraryService()
+        metadataSource.metadataByISBN["9784081135684"] = BookMetadata(
+            title: "Hunter×hunter 5",
+            coverImageURL: "https://example.com/cover.jpg",
+            seriesName: "Hunter×hunter",
+            volumeNumber: 5
+        )
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: metadataSource)
+        viewModel.judge(isbn: "9784081135684")
+        await viewModel.enrichmentTask?.value
+        viewModel.addCurrentResultToWishlist()
+
+        XCTAssertTrue(repository.insertedDrafts.isEmpty, "プレースホルダーと同じ巻は新規登録せず更新すること")
+        XCTAssertTrue(repository.updatedIDs.contains(placeholder.id))
+        let updated = try XCTUnwrap(try repository.find(id: placeholder.id))
+        XCTAssertEqual(updated.isbn, "9784081135684")
+        XCTAssertEqual(updated.coverImageURL, "https://example.com/cover.jpg")
+        XCTAssertTrue(viewModel.didAddToWishlist)
+    }
+
     func test_judge_unknownISBN_afterMetadataResolves_detectsEditionWarning() async throws {
         let repository = MockBookRepository()
         // 単行本を所持している状態で、文庫版（別ISBN）をスキャンするケース

@@ -17,6 +17,8 @@ struct BookChanges {
     var title: String
     var seriesName: String?
     var volumeNumber: Int?
+    var isbn: String?
+    var coverImageURL: String?
     var status: OwnershipStatus
     var readStatus: ReadStatus
 }

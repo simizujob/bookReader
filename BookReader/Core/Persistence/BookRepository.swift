@@ -164,6 +164,8 @@ final class CoreDataBookRepository: BookRepository {
             entity.seriesName = changes.seriesName
             entity.seriesKey = changes.seriesName.map { SeriesKeyNormalizer.normalize($0) }
             entity.volumeNumber = changes.volumeNumber.map { NSNumber(value: $0) }
+            entity.isbn = changes.isbn
+            entity.coverImageURL = changes.coverImageURL
             entity.status = changes.status.rawValue
             entity.readStatus = changes.readStatus.rawValue
 

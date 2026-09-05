@@ -68,6 +68,39 @@ final class PreCheckViewModel: ObservableObject {
     func addCurrentResultToWishlist() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
         let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
+
+        // 既に同じISBNで登録済み（「気になるリストへ」の連打や再スキャン）なら重複登録しない。
+        if (try? bookRepository.find(isbn: lastISBN)) != nil {
+            didAddToWishlist = true
+            return
+        }
+
+        // 既刊数が判明したシリーズは未登録の巻をISBN未確定のプレースホルダーとして
+        // 自動登録している（SeriesVolumeCountRefreshService）。同じ巻を実際にスキャンした場合、
+        // 新規登録せずそのプレースホルダーを実データで更新する（重複登録の防止）。
+        if let seriesName = enrichedContext.seriesName,
+           let volumeNumber = enrichedContext.volumeNumber,
+           let placeholder = try? bookRepository.find(
+               seriesKey: SeriesKeyNormalizer.normalize(seriesName),
+               volumeNumber: volumeNumber
+           ),
+           placeholder.isbn == nil {
+            guard (try? bookRepository.update(
+                id: placeholder.id,
+                changes: BookChanges(
+                    title: title,
+                    seriesName: seriesName,
+                    volumeNumber: volumeNumber,
+                    isbn: lastISBN,
+                    coverImageURL: enrichedContext.coverImageURL,
+                    status: .wishlist,
+                    readStatus: placeholder.readStatus
+                )
+            )) != nil else { return }
+            didAddToWishlist = true
+            return
+        }
+
         guard (try? bookRepository.insert(BookDraft(
             isbn: lastISBN,
             title: title,

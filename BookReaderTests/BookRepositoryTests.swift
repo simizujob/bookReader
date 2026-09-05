@@ -97,12 +97,44 @@ final class BookRepositoryTests: XCTestCase {
                 title: "進撃の巨人 5",
                 seriesName: "進撃の巨人",
                 volumeNumber: 5,
+                isbn: inserted.isbn,
+                coverImageURL: inserted.coverImageURL,
                 status: .owned,
                 readStatus: .unread
             )
         )
         XCTAssertEqual(updated.seriesKey, SeriesKeyNormalizer.normalize("進撃の巨人"))
         XCTAssertEqual(updated.volumeNumber, 5)
+    }
+
+    /// 回帰テスト: 全巻自動登録が作成したISBN未確定のプレースホルダーを、実際にスキャンして
+    /// 得たISBN・表紙画像で更新（マージ）できること。ステータス変更等の他のupdate呼び出しが
+    /// 誤ってisbn/coverImageURLを消してしまわないことも兼ねて確認する。
+    func test_update_canAttachISBNAndCoverImageToExistingBook() throws {
+        let inserted = try repository.insert(BookDraft(
+            isbn: nil,
+            title: "HUNTER×HUNTER 5",
+            seriesName: "HUNTER×HUNTER",
+            volumeNumber: 5,
+            coverImageURL: nil,
+            status: .wishlist,
+            readStatus: .unread,
+            metadataFetched: true
+        ))
+        let updated = try repository.update(
+            id: inserted.id,
+            changes: BookChanges(
+                title: "HUNTER×HUNTER 5",
+                seriesName: "HUNTER×HUNTER",
+                volumeNumber: 5,
+                isbn: "9784081135684",
+                coverImageURL: "https://example.com/cover.jpg",
+                status: .wishlist,
+                readStatus: .unread
+            )
+        )
+        XCTAssertEqual(updated.isbn, "9784081135684")
+        XCTAssertEqual(updated.coverImageURL, "https://example.com/cover.jpg")
     }
 
     func test_delete_removesBookFromSubsequentFetches() throws {
@@ -138,7 +170,10 @@ final class BookRepositoryTests: XCTestCase {
 
         try repository.update(
             id: book.id,
-            changes: BookChanges(title: book.title, seriesName: book.seriesName, volumeNumber: book.volumeNumber, status: .owned, readStatus: .finished)
+            changes: BookChanges(
+                title: book.title, seriesName: book.seriesName, volumeNumber: book.volumeNumber,
+                isbn: book.isbn, coverImageURL: book.coverImageURL, status: .owned, readStatus: .finished
+            )
         )
         XCTAssertEqual(scheduler.cancelledBookIDs, [book.id])
     }
@@ -150,7 +185,10 @@ final class BookRepositoryTests: XCTestCase {
 
         try repository.update(
             id: book.id,
-            changes: BookChanges(title: book.title, seriesName: book.seriesName, volumeNumber: book.volumeNumber, status: .owned, readStatus: .unread)
+            changes: BookChanges(
+                title: book.title, seriesName: book.seriesName, volumeNumber: book.volumeNumber,
+                isbn: book.isbn, coverImageURL: book.coverImageURL, status: .owned, readStatus: .unread
+            )
         )
         XCTAssertEqual(scheduler.scheduledBookIDs, [book.id])
     }

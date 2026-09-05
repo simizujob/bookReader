@@ -99,6 +99,8 @@ final class MockBookRepository: BookRepository {
         book.seriesName = changes.seriesName
         book.seriesKey = changes.seriesName.map { SeriesKeyNormalizer.normalize($0) }
         book.volumeNumber = changes.volumeNumber
+        book.isbn = changes.isbn
+        book.coverImageURL = changes.coverImageURL
         book.status = changes.status
         book.readStatus = changes.readStatus
         books[index] = book
