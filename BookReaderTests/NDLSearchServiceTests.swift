@@ -136,14 +136,37 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(count, 23)
     }
 
-    func test_fetchSeriesVolumeCount_hasGaps_returnsNilRatherThanWrongNumber() async throws {
+    func test_fetchSeriesVolumeCount_gapPartway_returnsOnlyTheLeadingConsecutiveRun() async throws {
         // 実際に確認した「著者名フィルタなし」のケース（1,10〜17巻しか取れず、2〜9,18〜23が歯抜け）を模したデータ。
-        // 誤った既刊数（17）を自信ありげに返すより「不明」の方が安全という方針の検証。
+        // 誤った既刊数（17）を自信ありげに返すのは避けつつ、1巻から連続して確認できる区間
+        // （この場合は1巻のみ）までは既刊数として採用する。
         let items = ([1] + Array(10...17)).map { (title: "鬼滅の刃", volume: String($0)) }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
         let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
-        XCTAssertNil(count, "歯抜けがある場合は誤った数値を返さずnilにすること")
+        XCTAssertEqual(count, 1, "2巻の欠番以降は信頼できないため切り捨て、1巻から連続する区間のみ採用すること")
+    }
+
+    /// 回帰テスト: 実際にNDLで確認したHUNTER×HUNTERのケース（1〜16巻は連続して存在するが
+    /// 17巻の数字表記レコードがNDLに存在せず、18巻だけ単発でヒットする）を模したデータ。
+    /// 「1巻から不明。」ではユーザー体験として物足りないため、17巻の欠番より前（16巻）までを
+    /// 既刊総数として採用する。欠番の先にある18巻は信頼せず切り捨てる。
+    func test_fetchSeriesVolumeCount_gapNearEnd_returnsVolumesBeforeTheGap() async throws {
+        var items = (1...16).map { (title: "HUNTER×HUNTER", volume: String($0)) }
+        items.append((title: "HUNTER×HUNTER", volume: "18")) // 17巻は欠番、18巻だけ単発でヒット
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "HUNTER×HUNTER")
+        XCTAssertEqual(count, 16, "17巻の欠番より後の18巻は信頼できないため切り捨て、16巻までを既刊数とすること")
+    }
+
+    func test_fetchSeriesVolumeCount_firstVolumeMissing_returnsNil() async throws {
+        // 1巻自体が見つからない場合は連続区間の起点が無く、そもそも判断のしようがない
+        let items = (2...5).map { (title: "鬼滅の刃", volume: String($0)) }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertNil(count, "1巻が見つからない場合は不明とすること")
     }
 
     func test_fetchSeriesVolumeCount_ignoresNonNumericVolumeFormats() async throws {

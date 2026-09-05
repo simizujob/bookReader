@@ -69,9 +69,11 @@ final class NDLSearchService: BookMetadataFetching {
     /// 異体字などの表記ゆれが原因で、プログラム的に正しいクエリを組み立てられないことを確認済み）。
     /// 絞り込みなしでは1ページ（最大200件）に無関係な関連商品が混ざり、本来の巻が
     /// 歯抜けで取得されることがある（例: 1,10〜17巻しか取れず本来23巻あるようなケース）。
-    /// 誤った既刊数を自信ありげに返すのは「不明」より悪いため、
-    /// **1巻から検出した最大巻まで一つも欠番がない場合にのみ**採用し、
-    /// 少しでも歯抜けがあれば信頼できないデータとみなしnilを返す。
+    ///
+    /// 既刊総数は**1巻から連続して確認できた最大巻**を採用する（例: 1〜16巻が確認でき17巻だけ
+    /// 欠けている場合は16を返す）。18巻のように欠番の先に単発でヒットする巻は、そのISBNだけ
+    /// 別レコードでたまたま見つかっただけの可能性があり信頼できないため切り捨てる。
+    /// 1巻自体が見つからない場合は連続区間の起点が無く判断できないため不明（nil）とする。
     func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return nil
@@ -91,10 +93,17 @@ final class NDLSearchService: BookMetadataFetching {
                 .filter { $0.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget }
                 .compactMap { $0.volume.flatMap(Self.parseDigitsOnly) }
         )
-        guard let maxVolume = volumes.max(), maxVolume > 0 else { return nil }
+        return Self.longestConsecutiveRun(from: volumes)
+    }
 
-        let hasNoGaps = (1...maxVolume).allSatisfy { volumes.contains($0) }
-        return hasNoGaps ? maxVolume : nil
+    /// 1から連番で途切れずに存在する最大値を返す（例: {1,2,3,5,6} → 3）。1が無ければnil。
+    private static func longestConsecutiveRun(from volumes: Set<Int>) -> Int? {
+        guard volumes.contains(1) else { return nil }
+        var latest = 1
+        while volumes.contains(latest + 1) {
+            latest += 1
+        }
+        return latest
     }
 
     /// 数字のみで構成された巻数表記のみを受け付ける（"5" は可、"巻5"・"巻一"・"No. 71" は不可）。
