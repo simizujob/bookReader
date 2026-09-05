@@ -19,4 +19,12 @@ final class AffiliateLinkServiceTests: XCTestCase {
         XCTAssertEqual(items["tag"], "taros0480x84e-22")
         XCTAssertEqual(items["k"], "鬼滅の刃 20巻")
     }
+
+    func test_productURL_pointsToSameASINWithTrackingTag() {
+        let url = service.amazonProductURL(asin: "4088851306")
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        XCTAssertEqual(components.path, "/dp/4088851306")
+        let items = Dictionary(uniqueKeysWithValues: components.queryItems!.map { ($0.name, $0.value) })
+        XCTAssertEqual(items["tag"], "taros0480x84e-22")
+    }
 }
