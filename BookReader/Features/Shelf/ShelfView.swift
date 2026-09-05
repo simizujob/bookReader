@@ -71,7 +71,10 @@ struct ShelfView: View {
                 }
             }
             .sheet(isPresented: $showScanRegister) {
-                ScanRegisterView(bookRepository: bookRepository, onFinished: viewModel.reload)
+                ScanRegisterView(bookRepository: bookRepository, onFinished: {
+                    viewModel.reload()
+                    Task { await viewModel.refreshSeriesVolumeCounts() }
+                })
             }
             .sheet(item: $safariURL) { item in
                 SafariView(url: item.url)

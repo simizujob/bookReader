@@ -33,8 +33,17 @@ final class ShelfViewModel: ObservableObject {
         )
     }
 
+    /// テストからバックグラウンド再チェックの完了を待ち合わせるために公開している（本番コードからは未使用）。
+    private(set) var staleSeriesRefreshTask: Task<Void, Never>?
+
     func onAppear() {
         reload()
+        // 本棚を開くたびに、再チェックが必要なシリーズ（既刊数「不明」または30日以上前に
+        // 取得したもの）だけを静かに再取得する。1冊ずつスキャンして登録していく使い方では、
+        // シリーズの一部しか登録されていないタイミングでたまたま既刊数が「不明」になることが
+        // あるため、残りの巻を登録し終えて本棚を見返した時に自動で回復させるためのもの。
+        // 対象が無ければ通信は発生しないため、画面表示のたびに呼んでも負荷は小さい。
+        staleSeriesRefreshTask = Task { await refreshStaleSeriesQuietly() }
     }
 
     /// 本棚画面のpull-to-refresh用。キャッシュの鮮度（最大30日）を待たずに全シリーズの
@@ -42,6 +51,11 @@ final class ShelfViewModel: ObservableObject {
     /// 手動リカバリ手段として提供する。
     func refreshSeriesVolumeCounts() async {
         await volumeCountRefreshService.refreshAllSeries()
+        reload()
+    }
+
+    private func refreshStaleSeriesQuietly() async {
+        await volumeCountRefreshService.refreshStaleSeries()
         reload()
     }
 

@@ -86,6 +86,27 @@ final class ShelfViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isOverdue(makeBook(daysAgo: 29)))
     }
 
+    /// 回帰テスト: 本棚画面を開くたびに、再チェックが必要なシリーズ（既刊数「不明」等）だけを
+    /// バックグラウンドで静かに再取得すること。1冊ずつ登録していく使い方では、残りの巻を
+    /// 登録し終えた後にユーザーが手動でpull-to-refreshしなくても本棚を開くだけで
+    /// 自動的に回復するようにするための対応。
+    func test_onAppear_alsoRefreshesStaleSeriesInBackground() async {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        let refreshService = StubVolumeCountRefreshService()
+
+        let viewModel = ShelfViewModel(
+            bookRepository: repository,
+            calculator: calculator,
+            volumeCountRefreshService: refreshService
+        )
+        viewModel.onAppear()
+        await viewModel.staleSeriesRefreshTask?.value
+
+        XCTAssertEqual(refreshService.refreshStaleSeriesCallCount, 1)
+        XCTAssertEqual(refreshService.refreshAllSeriesCallCount, 0, "onAppearでは全件ではなく再チェックが必要なものだけを対象とすること")
+    }
+
     /// 本棚画面のpull-to-refresh用。キャッシュの鮮度に関わらず全シリーズを再取得し、
     /// 結果を画面に反映するためreload()も呼ばれること。
     func test_refreshSeriesVolumeCounts_forcesFullRefreshAndReloads() async {
