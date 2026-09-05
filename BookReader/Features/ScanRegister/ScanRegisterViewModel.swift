@@ -1,129 +1,134 @@
 import Foundation
 import CoreVideo
-import CoreImage
-import UIKit
 
-/// 本棚に登録（F-01）。詳細設計書5.2参照。
+/// 本棚に登録（F-01）。所持済みの本をISBNバーコードでスキャンして登録する。
+/// 買う前チェック（PreCheckViewModel）と同じ、バーコード単発検出方式を採用する
+/// （背表紙OCRによるタイトル認識は誤検出が多く不安定だったため廃止した）。
+/// 既に「気になる本棚」へ登録済みの巻をスキャンした場合は、新規登録せず既存のレコードを
+/// 購入済みステータスへ更新する（重複登録の防止）。
 @MainActor
 final class ScanRegisterViewModel: ObservableObject {
-    struct DetectedBookCandidate: Identifiable, Equatable {
-        let id = UUID()
-        var isbn: String?
-        var ocrTitle: String?
-        var thumbnail: UIImage?
-        var isDuplicate: Bool
+    enum RegisterResult: Equatable {
+        /// 新規に購入済みとして登録した
+        case registered(Book)
+        /// 気になるリスト（ISBN未確定のプレースホルダーを含む）から購入済みへ更新した
+        case upgradedFromWishlist(Book)
+        /// 既に購入済みとして登録済みだった
+        case alreadyOwned(Book)
     }
 
-    @Published private(set) var detectedItems: [DetectedBookCandidate] = []
-    @Published private(set) var isRegistering = false
-    @Published var showManualSearch = false
+    enum RegisterState: Equatable {
+        case scanning
+        case registering
+        case result(RegisterResult)
+        case error(String)
+    }
+
+    @Published private(set) var registerState: RegisterState = .scanning
 
     private let barcodeScanService: BarcodeScanning
-    private let ocrService: SpineTextRecognizing
     private let bookRepository: BookRepository
     private let metadataService: BookMetadataFetching
-    private let ciContext = CIContext()
+
+    private var lastISBN: String?
+    /// テストから登録処理の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
+    private(set) var registrationTask: Task<Void, Never>?
 
     init(
         barcodeScanService: BarcodeScanning = BarcodeScanService(),
-        ocrService: SpineTextRecognizing = SpineOCRService(),
         bookRepository: BookRepository,
         metadataService: BookMetadataFetching = CompositeBookMetadataService()
     ) {
         self.barcodeScanService = barcodeScanService
-        self.ocrService = ocrService
         self.bookRepository = bookRepository
         self.metadataService = metadataService
     }
 
-    /// カメラのライブフレームを検出候補に追加する。既に検出済みのISBNは重複追加しない。
     func handleCapturedFrame(_ pixelBuffer: CVPixelBuffer) {
-        let thumbnail = makeThumbnail(from: pixelBuffer)
-
-        if let isbn = try? barcodeScanService.detectISBN(in: pixelBuffer) {
-            guard !detectedItems.contains(where: { $0.isbn == isbn }) else { return }
-            let isDuplicate = (try? bookRepository.isDuplicate(isbn: isbn, title: "")) ?? false
-            detectedItems.append(DetectedBookCandidate(isbn: isbn, ocrTitle: nil, thumbnail: thumbnail, isDuplicate: isDuplicate))
-            return
-        }
-
-        guard let cgImage = makeCGImage(from: pixelBuffer),
-              let ocrResult = try? ocrService.recognizeTitle(in: cgImage),
-              ocrResult.confidence >= SpineOCRService.confidenceThreshold,
-              !ocrResult.text.isEmpty
-        else { return }
-
-        guard !detectedItems.contains(where: { $0.ocrTitle == ocrResult.text }) else { return }
-        let isDuplicate = (try? bookRepository.isDuplicate(isbn: nil, title: ocrResult.text)) ?? false
-        detectedItems.append(DetectedBookCandidate(isbn: nil, ocrTitle: ocrResult.text, thumbnail: thumbnail, isDuplicate: isDuplicate))
+        guard let isbn = try? barcodeScanService.detectISBN(in: pixelBuffer) else { return }
+        registerIfNeeded(isbn: isbn)
     }
 
-    func removeCandidate(_ candidate: DetectedBookCandidate) {
-        detectedItems.removeAll { $0.id == candidate.id }
+    /// テスト・手動検索経由など、ISBNが既に分かっている場合のエントリポイント
+    func register(isbn: String) {
+        registerIfNeeded(isbn: isbn)
     }
 
-    /// 検出した候補をまとめて登録する（詳細設計書5.2）。
-    /// OCR抽出タイトル、またはバーコード経由でOpen Libraryから即時取得できたタイトルは
-    /// TitleParserを通してtitle/seriesName/volumeNumberに分解する。
-    /// バーコードのみでオフライン登録した場合はseriesName/volumeNumberともnilのまま登録し、
-    /// MetadataBackfillServiceによる事後解決に委ねる。
-    func confirmRegistration() async {
-        isRegistering = true
-        defer { isRegistering = false }
+    private func registerIfNeeded(isbn: String) {
+        // カメラが同じ本を映し続けている間、同じISBNが繰り返し検出され続けるため、
+        // 直前と同じISBNの間は再処理しない。
+        guard isbn != lastISBN else { return }
+        lastISBN = isbn
+        registrationTask = Task { await performRegistration(isbn: isbn) }
+    }
 
-        var drafts: [BookDraft] = []
-        for candidate in detectedItems where !candidate.isDuplicate {
-            if let ocrTitle = candidate.ocrTitle {
-                let parsed = TitleParser.parse(ocrTitle)
-                drafts.append(BookDraft(
-                    isbn: nil,
-                    title: parsed.title,
-                    seriesName: parsed.seriesName,
-                    volumeNumber: parsed.volumeNumber,
-                    coverImageURL: nil,
-                    status: .owned,
-                    readStatus: .unread,
-                    metadataFetched: true
-                ))
-            } else if let isbn = candidate.isbn {
-                if let meta = try? await metadataService.fetchMetadata(isbn: isbn) {
-                    let resolved = meta.resolvedSeriesInfo
-                    drafts.append(BookDraft(
-                        isbn: isbn,
-                        title: meta.title,
-                        seriesName: resolved.seriesName,
-                        volumeNumber: resolved.volumeNumber,
-                        coverImageURL: meta.coverImageURL,
-                        status: .owned,
-                        readStatus: .unread,
-                        metadataFetched: true
-                    ))
-                } else {
-                    drafts.append(BookDraft(
-                        isbn: isbn,
-                        title: "ISBN: \(isbn)",
-                        seriesName: nil,
-                        volumeNumber: nil,
-                        coverImageURL: nil,
-                        status: .owned,
-                        readStatus: .unread,
-                        metadataFetched: false
-                    ))
+    private func performRegistration(isbn: String) async {
+        registerState = .registering
+        let meta = try? await metadataService.fetchMetadata(isbn: isbn)
+        let resolved = meta?.resolvedSeriesInfo
+        let title = meta?.title ?? "ISBN: \(isbn)"
+
+        do {
+            if let existing = try bookRepository.find(isbn: isbn) {
+                if existing.status == .owned {
+                    registerState = .result(.alreadyOwned(existing))
+                    return
                 }
+                let updated = try bookRepository.update(
+                    id: existing.id,
+                    changes: BookChanges(
+                        title: title,
+                        seriesName: resolved?.seriesName ?? existing.seriesName,
+                        volumeNumber: resolved?.volumeNumber ?? existing.volumeNumber,
+                        isbn: isbn,
+                        coverImageURL: meta?.coverImageURL ?? existing.coverImageURL,
+                        status: .owned,
+                        readStatus: .unread
+                    )
+                )
+                registerState = .result(.upgradedFromWishlist(updated))
+                return
             }
+
+            // 既刊数が判明したシリーズは未登録の巻をISBN未確定のプレースホルダーとして
+            // 自動登録している（SeriesVolumeCountRefreshService）。同じ巻を購入してスキャンした
+            // 場合、新規登録せずそのプレースホルダーを実データで更新する。
+            if let seriesName = resolved?.seriesName,
+               let volumeNumber = resolved?.volumeNumber,
+               let placeholder = try bookRepository.find(
+                   seriesKey: SeriesKeyNormalizer.normalize(seriesName),
+                   volumeNumber: volumeNumber
+               ),
+               placeholder.isbn == nil {
+                let updated = try bookRepository.update(
+                    id: placeholder.id,
+                    changes: BookChanges(
+                        title: title,
+                        seriesName: seriesName,
+                        volumeNumber: volumeNumber,
+                        isbn: isbn,
+                        coverImageURL: meta?.coverImageURL,
+                        status: .owned,
+                        readStatus: .unread
+                    )
+                )
+                registerState = .result(.upgradedFromWishlist(updated))
+                return
+            }
+
+            let inserted = try bookRepository.insert(BookDraft(
+                isbn: isbn,
+                title: title,
+                seriesName: resolved?.seriesName,
+                volumeNumber: resolved?.volumeNumber,
+                coverImageURL: meta?.coverImageURL,
+                status: .owned,
+                readStatus: .unread,
+                metadataFetched: meta != nil
+            ))
+            registerState = .result(.registered(inserted))
+        } catch {
+            registerState = .error("登録に失敗しました")
         }
-
-        _ = try? bookRepository.insertBatch(drafts)
-        detectedItems.removeAll()
-    }
-
-    private func makeCGImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        return ciContext.createCGImage(ciImage, from: ciImage.extent)
-    }
-
-    private func makeThumbnail(from pixelBuffer: CVPixelBuffer) -> UIImage? {
-        guard let cgImage = makeCGImage(from: pixelBuffer) else { return nil }
-        return UIImage(cgImage: cgImage)
     }
 }

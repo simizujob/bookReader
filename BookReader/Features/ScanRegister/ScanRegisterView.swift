@@ -13,30 +13,16 @@ struct ScanRegisterView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 cameraSection
-                Text("\(viewModel.detectedItems.count)冊 検出中")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                candidateList
-                Button {
-                    Task {
-                        await viewModel.confirmRegistration()
-                        onFinished()
-                        dismiss()
-                    }
-                } label: {
-                    if viewModel.isRegistering {
-                        ProgressView()
-                    } else {
-                        Text("この\(viewModel.detectedItems.count)冊を登録する")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.detectedItems.isEmpty || viewModel.isRegistering)
+                resultSection
+                Spacer()
             }
             .padding()
             .navigationTitle("本棚に登録")
+            .safeAreaInset(edge: .bottom) {
+                scannedBookFooter
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる") { dismiss() }
@@ -48,47 +34,117 @@ struct ScanRegisterView: View {
                 }
                 camera.start()
             }
-            .onDisappear { camera.stop() }
+            .onDisappear {
+                camera.stop()
+                onFinished()
+            }
         }
     }
 
     @ViewBuilder
     private var cameraSection: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 16).fill(Color.black)
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.black)
             if camera.isCameraAvailable {
                 CameraPreviewView(session: camera.captureSession)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
             } else {
-                Text("カメラを利用できません").foregroundStyle(.white)
+                Text("カメラを利用できません")
+                    .foregroundStyle(.white)
             }
         }
-        .frame(height: 240)
+        .frame(height: 280)
     }
 
-    private var candidateList: some View {
-        ScrollView(.horizontal) {
+    @ViewBuilder
+    private var resultSection: some View {
+        switch viewModel.registerState {
+        case .scanning:
+            Text("所持している本のバーコードにカメラをかざしてください")
+                .foregroundStyle(.secondary)
+        case .registering:
             HStack(spacing: 8) {
-                ForEach(viewModel.detectedItems) { candidate in
-                    VStack(spacing: 4) {
-                        Image(uiImage: candidate.thumbnail ?? UIImage())
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 60)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay {
-                                if candidate.isDuplicate {
-                                    RoundedRectangle(cornerRadius: 6).stroke(Color.orange, lineWidth: 2)
-                                }
-                            }
-                        if candidate.isDuplicate {
-                            Text("登録済み").font(.caption2).foregroundStyle(.orange)
-                        }
-                    }
-                    .onTapGesture { viewModel.removeCandidate(candidate) }
+                ProgressView()
+                Text("登録中…").foregroundStyle(.secondary)
+            }
+        case .error(let message):
+            Text(message).foregroundStyle(.red)
+        case .result(let result):
+            resultCard(for: result)
+        }
+    }
+
+    @ViewBuilder
+    private func resultCard(for result: ScanRegisterViewModel.RegisterResult) -> some View {
+        switch result {
+        case .registered:
+            resultCardView(title: "本棚に登録しました", tint: .green, systemImage: "checkmark.circle.fill")
+        case .upgradedFromWishlist:
+            resultCardView(title: "気になるリストから購入済みへ更新しました", tint: .green, systemImage: "checkmark.circle.fill")
+        case .alreadyOwned:
+            resultCardView(title: "既に登録済みです", tint: .secondary, systemImage: "info.circle")
+        }
+    }
+
+    private func resultCardView(title: String, tint: Color, systemImage: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage).foregroundStyle(tint)
+            Text(title).font(.headline)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - スキャンした本（画面下部）
+
+    @ViewBuilder
+    private var scannedBookFooter: some View {
+        if let book = scannedBook {
+            HStack(spacing: 12) {
+                coverThumbnail(url: book.coverImageURL)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("スキャンした本").font(.caption).foregroundStyle(.secondary)
+                    Text(book.title).font(.subheadline).fontWeight(.semibold).lineLimit(2)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(.thinMaterial)
+        }
+    }
+
+    private var scannedBook: Book? {
+        guard case .result(let result) = viewModel.registerState else { return nil }
+        switch result {
+        case .registered(let book), .upgradedFromWishlist(let book), .alreadyOwned(let book):
+            return book
+        }
+    }
+
+    @ViewBuilder
+    private func coverThumbnail(url: String?) -> some View {
+        let placeholder = RoundedRectangle(cornerRadius: 4)
+            .fill(Color.secondary.opacity(0.2))
+            .overlay {
+                Image(systemName: "book.closed").foregroundStyle(.secondary)
+            }
+
+        if let url, let imageURL = URL(string: url) {
+            AsyncImage(url: imageURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    placeholder
                 }
             }
+            .frame(width: 40, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+        } else {
+            placeholder.frame(width: 40, height: 56)
         }
-        .frame(height: 80)
     }
 }
