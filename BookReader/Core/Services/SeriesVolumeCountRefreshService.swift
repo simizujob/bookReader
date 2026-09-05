@@ -31,15 +31,25 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
 
     func refreshStaleSeries() async {
         guard let staleKeys = try? calculator.seriesKeysNeedingRefresh(), !staleKeys.isEmpty else { return }
-        guard let allBooks = try? bookRepository.fetchAll() else { return }
+        // SeriesProgressCalculator.calculateAll()がグループ内の多数決で選んだ代表表記をそのまま使う。
+        // 以前はbookRepository.fetchAll()の配列内でたまたま先頭に来た本の表記をそのまま検索クエリに
+        // 使っており、ムック本など少数派の表記の本が先頭になるとNDL検索が空振りして既刊数が
+        // 「不明」になる不具合があった（表示用のシリーズ名選択だけを多数決化し、検索クエリ用の
+        // この箇所を直し忘れていたのが原因）。
+        guard let allSeries = try? calculator.calculateAll() else { return }
+        let seriesByKey = Dictionary(uniqueKeysWithValues: allSeries.map { ($0.seriesKey, $0) })
 
         for seriesKey in staleKeys {
-            // seriesKeyは正規化済みの内部キーのため、検索には元の表示用シリーズ名が必要。
-            guard let seriesName = allBooks.first(where: { $0.seriesKey == seriesKey })?.seriesName else { continue }
+            guard let series = seriesByKey[seriesKey] else { continue }
+            let seriesName = series.seriesName
             let count = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
             try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: count ?? nil)
             if let total = count, total > 0 {
-                backfillMissingVolumes(seriesKey: seriesKey, seriesName: seriesName, total: total, existingBooks: allBooks)
+                backfillMissingVolumes(
+                    seriesName: seriesName,
+                    total: total,
+                    existingVolumeNumbers: Set(series.volumes.map(\.volumeNumber))
+                )
             }
             try? await Task.sleep(nanoseconds: interRequestDelayNanoseconds)
         }
@@ -49,13 +59,8 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
     /// まとめて自動登録する。本棚統合画面でシリーズの全巻を一覧表示し、どの巻が未読／未購入かを
     /// 一目で分かるようにするためのユーザー要望対応。実物をスキャンせずAmazon等で購入する
     /// ケースもあるため、ISBNなしのまま登録し購入導線はキーワード検索の購入リンクで代替する。
-    private func backfillMissingVolumes(seriesKey: String, seriesName: String, total: Int, existingBooks: [Book]) {
-        let existingVolumes = Set(
-            existingBooks
-                .filter { $0.seriesKey == seriesKey }
-                .compactMap(\.volumeNumber)
-        )
-        let missing = (1...total).filter { !existingVolumes.contains($0) }
+    private func backfillMissingVolumes(seriesName: String, total: Int, existingVolumeNumbers: Set<Int>) {
+        let missing = (1...total).filter { !existingVolumeNumbers.contains($0) }
         guard !missing.isEmpty else { return }
 
         let drafts = missing.map { volume in

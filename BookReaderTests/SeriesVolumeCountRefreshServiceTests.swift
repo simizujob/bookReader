@@ -158,6 +158,36 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(progress?.volumes.count, 1, "既刊総数が不明な場合は自動登録しないこと")
     }
 
+    /// 回帰テスト: 検索クエリに使うシリーズ名は、Book配列内でたまたま先頭に来た表記ではなく、
+    /// SeriesProgressCalculatorが選ぶ「多数派の表記」と一致していること。
+    /// 以前はbookRepository.fetchAll()の配列で先頭に来た本の表記をそのまま検索クエリに
+    /// 使っていたため、ムック本など少数派の表記の本が先頭になると検索が空振りし、
+    /// 既刊数が「不明」になる不具合があった。
+    func test_refreshStaleSeries_usesMajorityVariantAsSearchQuery_notArbitraryFirstBook() async throws {
+        // 少数派の表記ゆれ本（ムック本相当、巻数なし）を先に登録し、配列の先頭に来やすい状況を再現する
+        try repository.insert(BookDraft(
+            isbn: nil, title: "hunter×hunterファンブック", seriesName: "hunter×hunter",
+            volumeNumber: nil, coverImageURL: nil, status: .owned, readStatus: .unread, metadataFetched: true
+        ))
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 1)
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 2)
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 3)
+
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["HUNTER×HUNTER"] = 3
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        XCTAssertEqual(metadataService.requestedSeriesNames, ["HUNTER×HUNTER"], "検索クエリには多数派の表記が使われること")
+    }
+
     func test_refreshStaleSeries_noOwnedBooks_doesNothing() async throws {
         let metadataService = StubMetadataService()
         let service = SeriesVolumeCountRefreshService(
