@@ -37,15 +37,29 @@ final class NDLSearchService: BookMetadataFetching {
         guard let url = components.url else { throw NDLSearchError.decodingFailed }
 
         let data = try await fetchData(from: url)
-        guard let item = NDLResponseParser().parseFirst(data), let title = item.title, !title.isEmpty else {
+        let items = NDLResponseParser().parseAll(data)
+        guard let title = Self.preferredTitle(among: items), !title.isEmpty else {
             throw NDLSearchError.notFound
         }
 
-        let volume = item.volume.flatMap(Self.parseDigitsOnly)
+        // 同一ISBNに対しNDLが新旧複数のレコードを重複して持つことがある（例: 1998年刊行の
+        // HUNTER×HUNTER 1巻は、巻数が数字で入った並列タイトル表記のレコードと、シリーズ内の
+        // 他の巻と同じ体裁のタイトルを持つレコードが別々に存在する）。片方だけを見ると、
+        // タイトル表記のズレでシリーズが分裂したり、巻数が取得できなかったりするため、
+        // 全レコードを横断してタイトル・巻数それぞれ最も使えるものを選ぶ。
+        let volume = items.lazy.compactMap { $0.volume.flatMap(Self.parseDigitsOnly) }.first
         if let volume {
             return BookMetadata(title: "\(title) \(volume)", seriesName: title, volumeNumber: volume)
         }
         return BookMetadata(title: title)
+    }
+
+    /// NDLの並列タイトル表記（例: "Hunter×hunter = ハンター ハンター"）はISBD形式の代替タイトル
+    /// 併記であり、シリーズ内の他の巻とは異なる正規化キーになってしまう。並列表記でないタイトルを
+    /// 持つレコードが他にあればそちらを優先し、なければ先頭のレコードにフォールバックする。
+    private static func preferredTitle(among items: [NDLResponseParser.Item]) -> String? {
+        let titles = items.compactMap(\.title).filter { !$0.isEmpty }
+        return titles.first { !$0.contains(" = ") } ?? titles.first
     }
 
     /// 既刊総数のベストエフォート推定。タイトルで検索し、タイトルが完全一致かつ巻数が

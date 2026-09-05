@@ -68,6 +68,33 @@ final class NDLSearchServiceTests: XCTestCase {
         }
     }
 
+    /// 回帰テスト: 実際にNDL Searchで確認した事例（ISBN 9784088725710 = HUNTER×HUNTER 1巻 1998年初版）を
+    /// 固定データとして使用する。NDLは同一ISBNに対し、並列タイトル表記（"Hunter×hunter = ハンター ハンター"）
+    /// で数字の巻数を持つ旧レコードと、シリーズ内の他の巻と同じ表記だが巻数が"no.1"で数字ではない
+    /// レコードの2件を返す。先頭レコードをそのまま採用すると、シリーズ名が他の巻と正規化キーが
+    /// 一致しなくなりシリーズが分裂してしまう不具合があった。
+    func test_fetchMetadata_duplicateNDLRecordsForSameISBN_prefersNonParallelTitleAndMergesVolume() async throws {
+        let xml = """
+        <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
+          <channel>
+            <item>
+              <dc:title>Hunter×hunter = ハンター ハンター</dc:title>
+              <dcndl:volume>1</dcndl:volume>
+            </item>
+            <item>
+              <dc:title>Hunter×hunter</dc:title>
+              <dcndl:volume>no.1</dcndl:volume>
+            </item>
+          </channel>
+        </rss>
+        """
+        let service = makeService(xml: xml)
+        let metadata = try await service.fetchMetadata(isbn: "9784088725710")
+
+        XCTAssertEqual(metadata.seriesName, "Hunter×hunter", "他の巻と同じ正規化キーになるよう、並列タイトルでない表記を優先すること")
+        XCTAssertEqual(metadata.volumeNumber, 1, "巻数は別レコードからでも数字表記のものを拾えること")
+    }
+
     func test_fetchMetadata_bookWithoutVolume_returnsNilSeriesInfo() async throws {
         let xml = """
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
