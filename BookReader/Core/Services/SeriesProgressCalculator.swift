@@ -89,6 +89,14 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
         let seriesKeys = Set(try bookRepository.fetchAll().compactMap { $0.seriesKey })
         return try seriesKeys.filter { key in
             guard let cache = try metadataCache.cached(seriesKey: key) else { return true }
+            // 既刊総数が「不明」（nil）の結果はキャッシュの鮮度に関わらず毎回再チェック対象とする。
+            // 蔵書を1冊ずつスキャンして登録していく実際の使われ方では、シリーズの一部（例えば
+            // ムック本1冊だけ等）しか登録されていないタイミングでたまたま自動チェックが走り、
+            // 代表表記の多数決が本編と異なる少数派の表記に決まって検索が空振りし、その「不明」が
+            // 丸ごと最大30日間キャッシュに固定されてしまう不具合があった。「分かった」結果は
+            // 無駄な問い合わせを避けるため30日キャッシュするが、「分からなかった」結果は
+            // 残りの巻を登録し終えた次回起動時に自動で再チェックできるようにする。
+            guard let knownTotalVolumes = cache.knownTotalVolumes, knownTotalVolumes > 0 else { return true }
             let staleDate = Calendar.current.date(
                 byAdding: .day, value: -Self.cacheStalenessDays, to: Date()
             ) ?? .distantPast

@@ -178,6 +178,29 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         XCTAssertEqual(progress?.seriesName, "ALPHA", "同数の場合は常に同じ表記が選ばれ、実行ごとに変わらないこと")
     }
 
+    // MARK: - seriesKeysNeedingRefresh（既刊数「不明」の再チェック）
+
+    /// 回帰テスト: 既刊総数が「不明」（nil）でキャッシュされている場合、キャッシュの鮮度
+    /// （30日）に関わらず常に再チェック対象とすること。蔵書を1冊ずつ登録していく実際の
+    /// 使われ方では、シリーズの一部しか登録されていないタイミングでたまたま既刊数チェックが
+    /// 走り「不明」がキャッシュされてしまうことがあるが、それを最大30日間放置せず、
+    /// 残りの巻を登録し終えた次回起動時に自動で再チェックできるようにする。
+    func test_seriesKeysNeedingRefresh_cachedAsUnknown_alwaysNeedsRefreshRegardlessOfFreshness() throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        try cache.upsert(seriesKey: SeriesKeyNormalizer.normalize("三体"), totalVolumes: nil) // たった今キャッシュされた「不明」
+
+        let keys = try calculator.seriesKeysNeedingRefresh()
+        XCTAssertTrue(keys.contains(SeriesKeyNormalizer.normalize("三体")), "「不明」はキャッシュが新しくても再チェック対象とすること")
+    }
+
+    func test_seriesKeysNeedingRefresh_cachedWithKnownTotal_respectsFreshnessWindow() throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        try cache.upsert(seriesKey: SeriesKeyNormalizer.normalize("三体"), totalVolumes: 3) // たった今キャッシュされた既知の値
+
+        let keys = try calculator.seriesKeysNeedingRefresh()
+        XCTAssertFalse(keys.contains(SeriesKeyNormalizer.normalize("三体")), "既知の値はキャッシュが新しければ再チェック不要のままとすること")
+    }
+
     func test_statusCounts_summarizesByUnifiedStatus() throws {
         try insertOwned(seriesName: "三体", volume: 1) // unread
         let vol2 = try repository.insert(BookDraft(
