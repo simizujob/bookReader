@@ -11,6 +11,13 @@ final class ShelfViewModelTests: XCTestCase {
         func seriesKeysNeedingRefresh() throws -> [String] { [] }
     }
 
+    private final class StubVolumeCountRefreshService: SeriesVolumeCountRefreshing {
+        private(set) var refreshStaleSeriesCallCount = 0
+        private(set) var refreshAllSeriesCallCount = 0
+        func refreshStaleSeries() async { refreshStaleSeriesCallCount += 1 }
+        func refreshAllSeries() async { refreshAllSeriesCallCount += 1 }
+    }
+
     private func makeBook(
         status: OwnershipStatus = .wishlist,
         readStatus: ReadStatus = .unread,
@@ -77,6 +84,25 @@ final class ShelfViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.isOverdue(makeBook(daysAgo: 30)))
         XCTAssertFalse(viewModel.isOverdue(makeBook(daysAgo: 29)))
+    }
+
+    /// 本棚画面のpull-to-refresh用。キャッシュの鮮度に関わらず全シリーズを再取得し、
+    /// 結果を画面に反映するためreload()も呼ばれること。
+    func test_refreshSeriesVolumeCounts_forcesFullRefreshAndReloads() async {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        calculator.standalone = [makeBook()]
+        let refreshService = StubVolumeCountRefreshService()
+
+        let viewModel = ShelfViewModel(
+            bookRepository: repository,
+            calculator: calculator,
+            volumeCountRefreshService: refreshService
+        )
+        await viewModel.refreshSeriesVolumeCounts()
+
+        XCTAssertEqual(refreshService.refreshAllSeriesCallCount, 1)
+        XCTAssertEqual(viewModel.standaloneBooks.count, 1, "再取得後に最新のデータへreloadされること")
     }
 
     func test_openStoreSearchForBook_usesISBNWhenAvailable() {

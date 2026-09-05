@@ -14,18 +14,34 @@ final class ShelfViewModel: ObservableObject {
     private let bookRepository: BookRepository
     private let calculator: SeriesProgressCalculating
     private let affiliateLinkService: AffiliateLinking
+    private let volumeCountRefreshService: SeriesVolumeCountRefreshing
 
     init(
         bookRepository: BookRepository,
         calculator: SeriesProgressCalculating,
-        affiliateLinkService: AffiliateLinking = AffiliateLinkService()
+        affiliateLinkService: AffiliateLinking = AffiliateLinkService(),
+        volumeCountRefreshService: SeriesVolumeCountRefreshing? = nil
     ) {
         self.bookRepository = bookRepository
         self.calculator = calculator
         self.affiliateLinkService = affiliateLinkService
+        self.volumeCountRefreshService = volumeCountRefreshService ?? SeriesVolumeCountRefreshService(
+            bookRepository: bookRepository,
+            calculator: calculator,
+            metadataCache: CoreDataSeriesMetadataCache(context: PersistenceController.shared.container.viewContext),
+            metadataService: CompositeBookMetadataService()
+        )
     }
 
     func onAppear() {
+        reload()
+    }
+
+    /// 本棚画面のpull-to-refresh用。キャッシュの鮮度（最大30日）を待たずに全シリーズの
+    /// 既刊数を再取得する。「不明」等の古い結果がキャッシュされたままになっている場合の
+    /// 手動リカバリ手段として提供する。
+    func refreshSeriesVolumeCounts() async {
+        await volumeCountRefreshService.refreshAllSeries()
         reload()
     }
 

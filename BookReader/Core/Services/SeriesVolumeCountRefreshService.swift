@@ -2,6 +2,10 @@ import Foundation
 
 protocol SeriesVolumeCountRefreshing {
     func refreshStaleSeries() async
+    /// キャッシュの鮮度に関わらず全シリーズを再取得する。本棚画面のpull-to-refresh用。
+    /// 既刊数取得ロジック自体を変更した直後など、「不明」等の古い結果がキャッシュされたまま
+    /// 最大30日再取得されない、という状況をユーザー自身がすぐ解消できるようにするために必要。
+    func refreshAllSeries() async
 }
 
 /// 既刊総数キャッシュの再取得（F-05）。詳細設計書4.2「seriesKeysNeedingRefresh」を実際に
@@ -38,6 +42,15 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
 
     func refreshStaleSeries() async {
         guard let staleKeys = try? calculator.seriesKeysNeedingRefresh(), !staleKeys.isEmpty else { return }
+        await refresh(seriesKeys: staleKeys)
+    }
+
+    func refreshAllSeries() async {
+        guard let allSeries = try? calculator.calculateAll(), !allSeries.isEmpty else { return }
+        await refresh(seriesKeys: allSeries.map(\.seriesKey))
+    }
+
+    private func refresh(seriesKeys: [String]) async {
         // SeriesProgressCalculator.calculateAll()がグループ内の多数決で選んだ代表表記をそのまま使う。
         // 以前はbookRepository.fetchAll()の配列内でたまたま先頭に来た本の表記をそのまま検索クエリに
         // 使っており、ムック本など少数派の表記の本が先頭になるとNDL検索が空振りして既刊数が
@@ -46,7 +59,7 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
         guard let allSeries = try? calculator.calculateAll() else { return }
         let seriesByKey = Dictionary(uniqueKeysWithValues: allSeries.map { ($0.seriesKey, $0) })
 
-        for seriesKey in staleKeys {
+        for seriesKey in seriesKeys {
             guard let series = seriesByKey[seriesKey] else { continue }
             let seriesName = series.seriesName
             let rawCount = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)

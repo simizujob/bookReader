@@ -53,6 +53,7 @@ struct ShelfView: View {
                     }
                 }
                 .listStyle(.plain)
+                .refreshable { await viewModel.refreshSeriesVolumeCounts() }
 
                 // F-07: 本棚画面にはバナー広告を表示する（買う前チェックの判定結果画面は非表示）
                 adService.bannerView()

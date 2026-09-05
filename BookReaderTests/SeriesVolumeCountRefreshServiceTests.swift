@@ -213,6 +213,30 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(progress?.volumes.count, 1, "非現実的に大きい値では全巻自動登録を行わないこと")
     }
 
+    /// 回帰テスト: 既刊数取得ロジックの変更直後など、直近にキャッシュされた「不明」等の古い結果を
+    /// 30日待たずにユーザーが手動で更新できるようにするための機能（本棚のpull-to-refresh用）。
+    /// refreshStaleSeries()と異なり、キャッシュが新しくても常に再取得すること。
+    func test_refreshAllSeries_refetchesEvenWhenCacheIsFresh() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        try cache.upsert(seriesKey: SeriesKeyNormalizer.normalize("三体"), totalVolumes: nil) // 直近キャッシュ済みの「不明」
+
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["三体"] = 3 // ロジック変更等で今なら取得できる想定
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+
+        await service.refreshAllSeries()
+
+        XCTAssertEqual(metadataService.requestedSeriesNames, ["三体"], "キャッシュが新しくても再取得すること")
+        let cached = try cache.cached(seriesKey: SeriesKeyNormalizer.normalize("三体"))
+        XCTAssertEqual(cached?.knownTotalVolumes, 3)
+    }
+
     func test_refreshStaleSeries_noOwnedBooks_doesNothing() async throws {
         let metadataService = StubMetadataService()
         let service = SeriesVolumeCountRefreshService(
