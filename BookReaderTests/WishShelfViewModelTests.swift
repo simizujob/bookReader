@@ -8,6 +8,7 @@ final class WishShelfViewModelTests: XCTestCase {
         var standalone: [Book] = []
         func calculateAll() throws -> [SeriesProgress] { result }
         func standaloneWishlistBooks() throws -> [Book] { standalone }
+        func seriesKeysNeedingRefresh() throws -> [String] { [] }
     }
 
     private func makeBook(title: String, isbn: String? = "9789999999999") -> Book {

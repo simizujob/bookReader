@@ -36,5 +36,9 @@ enum BookMetadataError: Error, Equatable {
 protocol BookMetadataFetching {
     func fetchMetadata(isbn: String) async throws -> BookMetadata
     /// 既刊総数の暫定推定値（詳細設計書4.7参照、要件定義書14章のリスクを踏まえた暫定ロジック）。
+    /// ベストエフォート方針: 著者名によるクエリ絞り込みは検証の結果、生データの表記ゆれ
+    /// （読点・生年付記・異体字など）が原因で信頼できないと判明したため採用しない。
+    /// 代わりに「1巻から最大巻まで欠番なく検出できた場合のみ」採用し、少しでも歯抜けがあれば
+    /// nilを返す（誤った既刊数を自信ありげに表示するより「不明」の方が安全という判断）。
     func fetchSeriesVolumeCount(seriesName: String) async throws -> Int?
 }

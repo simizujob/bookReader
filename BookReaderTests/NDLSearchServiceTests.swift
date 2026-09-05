@@ -85,4 +85,66 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertNil(metadata.seriesName)
         XCTAssertNil(metadata.volumeNumber)
     }
+
+    // MARK: - fetchSeriesVolumeCount（「欠番なしの場合のみ採用」ルール）
+
+    private func makeSeriesSearchXML(items: [(title: String, volume: String?)]) -> String {
+        let itemsXML = items.map { item in
+            let volumeTag = item.volume.map { "<dcndl:volume>\($0)</dcndl:volume>" } ?? ""
+            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)</item>"
+        }.joined()
+        return """
+        <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
+          <channel>\(itemsXML)</channel>
+        </rss>
+        """
+    }
+
+    func test_fetchSeriesVolumeCount_noGaps_returnsMaxVolume() async throws {
+        // 実際に確認した鬼滅の刃（1〜23巻、欠番なし）のケースを模したデータ
+        let items = (1...23).map { (title: "鬼滅の刃", volume: String($0)) }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(count, 23)
+    }
+
+    func test_fetchSeriesVolumeCount_hasGaps_returnsNilRatherThanWrongNumber() async throws {
+        // 実際に確認した「著者名フィルタなし」のケース（1,10〜17巻しか取れず、2〜9,18〜23が歯抜け）を模したデータ。
+        // 誤った既刊数（17）を自信ありげに返すより「不明」の方が安全という方針の検証。
+        let items = ([1] + Array(10...17)).map { (title: "鬼滅の刃", volume: String($0)) }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertNil(count, "歯抜けがある場合は誤った数値を返さずnilにすること")
+    }
+
+    func test_fetchSeriesVolumeCount_ignoresNonNumericVolumeFormats() async throws {
+        // 実際に確認したONE PIECEのケース（「巻1」「巻90」のような「巻」+数字形式）を模したデータ。
+        // ベストエフォート方針では数字のみの表記だけを対象とするため、これらは無視されnilになる。
+        let items = [
+            (title: "ONE PIECE", volume: "巻1"),
+            (title: "ONE PIECE", volume: "巻2"),
+            (title: "ONE PIECE", volume: "巻3")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertNil(count)
+    }
+
+    func test_fetchSeriesVolumeCount_ignoresItemsWithDifferentTitle() async throws {
+        var items = (1...5).map { (title: "鬼滅の刃", volume: String($0)) }
+        items.append((title: "鬼滅の刃イラスト集", volume: "10")) // タイトル完全一致しない関連グッズ等
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(count, 5, "タイトルが完全一致しない項目（関連グッズ等）は既刊数の計算に含めないこと")
+    }
+
+    func test_fetchSeriesVolumeCount_noMatchingItems_returnsNil() async throws {
+        let service = makeService(xml: makeSeriesSearchXML(items: []))
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "存在しないシリーズ")
+        XCTAssertNil(count)
+    }
 }

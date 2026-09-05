@@ -31,11 +31,27 @@ struct BookReaderApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             Task {
+                let metadataService = CompositeBookMetadataService()
                 let backfill = MetadataBackfillService(
                     bookRepository: bookRepository,
-                    metadataService: CompositeBookMetadataService()
+                    metadataService: metadataService
                 )
                 await backfill.backfillPendingMetadata()
+
+                let metadataCache = CoreDataSeriesMetadataCache(
+                    context: PersistenceController.shared.container.viewContext
+                )
+                let calculator = SeriesProgressCalculator(
+                    bookRepository: bookRepository,
+                    metadataCache: metadataCache
+                )
+                let volumeCountRefresh = SeriesVolumeCountRefreshService(
+                    bookRepository: bookRepository,
+                    calculator: calculator,
+                    metadataCache: metadataCache,
+                    metadataService: metadataService
+                )
+                await volumeCountRefresh.refreshStaleSeries()
             }
         }
     }

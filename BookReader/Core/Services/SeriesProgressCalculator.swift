@@ -6,6 +6,9 @@ protocol SeriesProgressCalculating {
     /// F-02の「気になるリストへ」はタイトル・シリーズ名未確定のまま登録されることが多いため、
     /// calculateAll()のシリーズカードだけでは表示漏れが起きる（気になる本棚に何も表示されない不具合の原因）。
     func standaloneWishlistBooks() throws -> [Book]
+    /// キャッシュの再取得が必要な（未取得、または30日以上古い）シリーズキー一覧。
+    /// SeriesVolumeCountRefreshServiceが非同期で既刊総数の再取得をトリガーする際に使用する。
+    func seriesKeysNeedingRefresh() throws -> [String]
 }
 
 /// シリーズ完結率の算出（F-05）。詳細設計書4.2参照。
@@ -69,8 +72,6 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
             .sorted { $0.registeredAt > $1.registeredAt }
     }
 
-    /// キャッシュの再取得が必要な（未取得、または30日以上古い）シリーズキー一覧。
-    /// MetadataBackfillServiceが非同期でOpen Libraryへの再取得をトリガーする際に使用する。
     func seriesKeysNeedingRefresh() throws -> [String] {
         let seriesKeys = Set(try bookRepository.fetchAll().compactMap { $0.seriesKey })
         return try seriesKeys.filter { key in
