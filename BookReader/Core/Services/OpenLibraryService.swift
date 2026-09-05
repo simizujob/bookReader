@@ -56,21 +56,13 @@ final class OpenLibraryService: BookMetadataFetching {
         return BookMetadata(title: title, coverImageURL: coverURL)
     }
 
+    /// Open Libraryのsearch.jsonはシリーズ名の自由文字列検索であり、"numFound"は
+    /// ヒットしたレコード総数（無関係な同名作品・翻訳版・関連グッズ等を含む）でしかなく、
+    /// シリーズの既刊総数を意味しない。和書（特に漫画）の収載も少ないため信頼できるデータが
+    /// そもそも存在しない（実際に「Hunter×hunter」で検索するとnumFoundは5万件を超え、
+    /// これをそのまま既刊総数として採用すると全巻自動登録が暴走する）。
+    /// 誤った既刊数を返すよりは常にnilを返す方が安全なため、この情報源は既刊数取得には使わない。
     func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
-        guard var components = URLComponents(string: "https://openlibrary.org/search.json") else {
-            return nil
-        }
-        components.queryItems = [URLQueryItem(name: "q", value: seriesName)]
-        guard let url = components.url else { return nil }
-
-        guard let (data, _) = try? await session.data(from: url) else { return nil }
-        guard
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let numFound = json["numFound"] as? Int,
-            numFound > 0
-        else {
-            return nil
-        }
-        return numFound
+        nil
     }
 }

@@ -188,6 +188,31 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(metadataService.requestedSeriesNames, ["HUNTER×HUNTER"], "検索クエリには多数派の表記が使われること")
     }
 
+    /// 回帰テスト: 情報源（BookMetadataFetching実装）が誤って非現実的な既刊総数を返した場合に、
+    /// キャッシュ保存や全巻自動登録を行わないこと。OpenLibraryServiceの旧実装が自由文字列検索の
+    /// ヒット件数（数万件）をそのまま返してしまい、全巻自動登録が暴走しかけた不具合があったため、
+    /// SeriesVolumeCountRefreshService側でも境界値検証として上限を設けている。
+    func test_refreshStaleSeries_implausiblyLargeCount_isDiscardedAsUnknown() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["三体"] = 57799
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        let cached = try cache.cached(seriesKey: SeriesKeyNormalizer.normalize("三体"))
+        XCTAssertNil(cached?.knownTotalVolumes, "非現実的に大きい値は既刊総数として採用しないこと")
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        XCTAssertEqual(progress?.volumes.count, 1, "非現実的に大きい値では全巻自動登録を行わないこと")
+    }
+
     func test_refreshStaleSeries_noOwnedBooks_doesNothing() async throws {
         let metadataService = StubMetadataService()
         let service = SeriesVolumeCountRefreshService(

@@ -9,6 +9,13 @@ protocol SeriesVolumeCountRefreshing {
 /// ままになっていた）。MetadataBackfillServiceと同様、アプリのscenePhaseが.activeになった
 /// タイミングで呼び出す想定。
 struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
+    /// 外部データソース（BookMetadataFetching実装）が返す既刊総数の上限。実在する国内漫画で
+    /// 最も長期連載のシリーズでも300巻に満たないため、これを超える値は自由文字列検索の
+    /// ヒット件数を誤って返す等、既刊総数として意味を成さないデータと判断して破棄する。
+    /// 全巻自動登録（backfillMissingVolumes）が暴走して大量の偽レコードを作らないための
+    /// 最終防衛ライン（境界での検証）。
+    static let maxPlausibleVolumeCount = 500
+
     private let bookRepository: BookRepository
     private let calculator: SeriesProgressCalculating
     private let metadataCache: SeriesMetadataCaching
@@ -42,8 +49,9 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
         for seriesKey in staleKeys {
             guard let series = seriesByKey[seriesKey] else { continue }
             let seriesName = series.seriesName
-            let count = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
-            try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: count ?? nil)
+            let rawCount = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
+            let count = rawCount.flatMap { $0 <= Self.maxPlausibleVolumeCount ? $0 : nil }
+            try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: count)
             if let total = count, total > 0 {
                 backfillMissingVolumes(
                     seriesName: seriesName,
