@@ -124,7 +124,9 @@ struct ShelfView: View {
                 Button {
                     safariURL = IdentifiableURL(url: viewModel.openStoreSearch(for: book))
                 } label: {
-                    Image(systemName: "cart")
+                    Image(systemName: "cart.fill")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("購入")
@@ -149,8 +151,8 @@ struct ShelfView: View {
                 }
             }
 
-            if let rate = series.completionRate {
-                ProgressView(value: rate)
+            if let total = series.totalVolumes {
+                SeriesStackedProgressBar(statusCounts: series.statusCounts, total: total)
             }
 
             if series.isNearCompletion {

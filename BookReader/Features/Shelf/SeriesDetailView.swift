@@ -63,8 +63,8 @@ struct SeriesDetailView: View {
     private func content(for series: SeriesProgress) -> some View {
         List {
             Section {
-                if let rate = series.completionRate {
-                    ProgressView(value: rate)
+                if let rate = series.completionRate, let total = series.totalVolumes {
+                    SeriesStackedProgressBar(statusCounts: series.statusCounts, total: total)
                     Text("完結率 \(Int(rate * 100))%")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -170,7 +170,9 @@ struct SeriesDetailView: View {
                 Button {
                     safariURL = IdentifiableURL(url: viewModel.openStoreSearch(for: book))
                 } label: {
-                    Image(systemName: "cart")
+                    Image(systemName: "cart.fill")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("\(entry.displayLabel)を購入")

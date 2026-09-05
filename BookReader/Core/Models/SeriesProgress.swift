@@ -34,6 +34,12 @@ struct SeriesProgress: Identifiable, Equatable {
         return rate >= 0.8 || (missingVolumes?.count ?? .max) <= 1
     }
 
+    /// 既刊総数（completionRateが判明している場合のみ）。積み上げ式進捗バーの分母に使う。
+    var totalVolumes: Int? {
+        guard completionRate != nil else { return nil }
+        return ownedVolumes.count + (missingVolumes?.count ?? 0)
+    }
+
     /// 本棚統合画面での「登録が新しい順」ソート用。シリーズ内で最も新しく登録された巻の日時を
     /// シリーズ自体の登録日時とみなす（直近で巻が追加されたシリーズほど上位に来るようにするため）。
     var latestRegisteredAt: Date {
