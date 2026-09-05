@@ -1,4 +1,5 @@
 import SwiftUI
+import MessageUI
 
 /// シリーズ内の巻ごとのステータスを一覧表示・変更する画面。
 /// 本棚一覧のシリーズカードをタップした先に表示される。
@@ -14,6 +15,8 @@ struct SeriesDetailView: View {
     @State private var showVolumeCountEntry = false
     @State private var volumeCountInput = ""
     @State private var showDeleteConfirm = false
+    @State private var showMailCompose = false
+    @State private var showMailUnavailableAlert = false
 
     init(
         seriesKey: String,
@@ -97,12 +100,36 @@ struct SeriesDetailView: View {
             }
 
             Section {
+                Button("シリーズの不具合を報告") {
+                    if MFMailComposeViewController.canSendMail() {
+                        showMailCompose = true
+                    } else {
+                        showMailUnavailableAlert = true
+                    }
+                }
+            }
+
+            Section {
                 Button("シリーズを削除する", role: .destructive) {
                     showDeleteConfirm = true
                 }
             }
         }
         .navigationTitle(series.seriesName)
+        .alert("メールが設定されていません", isPresented: $showMailUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("不具合報告の送信にはメールアプリの設定が必要です。設定アプリからメールアカウントを追加してください。")
+        }
+        .sheet(isPresented: $showMailCompose) {
+            let report = BugReportComposer.report(for: series)
+            MailComposeView(
+                recipient: BugReportComposer.recipientEmail,
+                subject: report.subject,
+                body: report.body,
+                onFinish: { showMailCompose = false }
+            )
+        }
         .confirmationDialog(
             "「\(series.seriesName)」を削除しますか？",
             isPresented: $showDeleteConfirm,

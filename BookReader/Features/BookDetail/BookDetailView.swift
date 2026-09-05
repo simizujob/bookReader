@@ -1,13 +1,19 @@
 import SwiftUI
+import MessageUI
 
 struct BookDetailView: View {
     @StateObject private var viewModel: BookDetailViewModel
     @Environment(\.dismiss) private var dismiss
     private let onChange: () -> Void
+    private let book: Book
+
+    @State private var showMailCompose = false
+    @State private var showMailUnavailableAlert = false
 
     init(book: Book, bookRepository: BookRepository, onChange: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: BookDetailViewModel(book: book, bookRepository: bookRepository))
         self.onChange = onChange
+        self.book = book
     }
 
     var body: some View {
@@ -32,6 +38,16 @@ struct BookDetailView: View {
                     Text("未読").tag(ReadStatus.unread)
                     Text("読書中").tag(ReadStatus.reading)
                     Text("読了").tag(ReadStatus.finished)
+                }
+            }
+
+            Section {
+                Button("不具合を報告") {
+                    if MFMailComposeViewController.canSendMail() {
+                        showMailCompose = true
+                    } else {
+                        showMailUnavailableAlert = true
+                    }
                 }
             }
 
@@ -72,6 +88,20 @@ struct BookDetailView: View {
             Button("OK") { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .alert("メールが設定されていません", isPresented: $showMailUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("不具合報告の送信にはメールアプリの設定が必要です。設定アプリからメールアカウントを追加してください。")
+        }
+        .sheet(isPresented: $showMailCompose) {
+            let report = BugReportComposer.report(for: book)
+            MailComposeView(
+                recipient: BugReportComposer.recipientEmail,
+                subject: report.subject,
+                body: report.body,
+                onFinish: { showMailCompose = false }
+            )
         }
     }
 }
