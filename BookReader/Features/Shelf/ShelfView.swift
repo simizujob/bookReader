@@ -119,6 +119,18 @@ struct ShelfView: View {
                 }
             }
             Spacer()
+            // 未購入の単行本は実物を持っていないため、Amazonでの購入導線を明示する。
+            if book.unifiedStatus == .wishlist {
+                Button {
+                    safariURL = IdentifiableURL(url: viewModel.openStoreSearch(for: book))
+                } label: {
+                    Image(systemName: "cart")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("購入")
+                // ステータス変更ピルとの誤タップを防ぐため間隔を空ける
+                .padding(.trailing, 16)
+            }
             StatusPillMenu(currentStatus: book.unifiedStatus) { newStatus in
                 viewModel.changeStatus(bookID: book.id, to: newStatus)
             }

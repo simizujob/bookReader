@@ -126,6 +126,8 @@ struct SeriesDetailView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("\(entry.volumeNumber)巻を購入")
+                // ステータス変更ピルとの誤タップを防ぐため間隔を空ける
+                .padding(.trailing, 16)
             }
             StatusPillMenu(currentStatus: entry.unifiedStatus) { newStatus in
                 viewModel.changeStatus(bookID: entry.bookID, to: newStatus)

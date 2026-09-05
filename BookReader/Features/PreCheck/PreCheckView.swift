@@ -1,8 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct PreCheckView: View {
     @StateObject private var viewModel: PreCheckViewModel
     @StateObject private var camera = CameraCaptureController()
+    /// カメラに集中していてスキャン完了に気づけない、というフィードバックを受けての対応。
+    /// 判定が確定した瞬間にカメラ映像の枠を光らせ、触感フィードバックも合わせて返す。
+    @State private var scanFlashOpacity: Double = 0
 
     init(bookRepository: BookRepository) {
         _viewModel = StateObject(wrappedValue: PreCheckViewModel(bookRepository: bookRepository))
@@ -33,6 +37,22 @@ struct PreCheckView: View {
                 camera.start()
             }
             .onDisappear { camera.stop() }
+            .onChange(of: viewModel.scanState) { _, newValue in
+                guard case .scanning = newValue else {
+                    flashScanCompletion()
+                    return
+                }
+            }
+        }
+    }
+
+    private func flashScanCompletion() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.easeOut(duration: 0.15)) {
+            scanFlashOpacity = 1
+        }
+        withAnimation(.easeIn(duration: 0.5).delay(0.15)) {
+            scanFlashOpacity = 0
         }
     }
 
@@ -48,6 +68,10 @@ struct PreCheckView: View {
                 Text("カメラを利用できません")
                     .foregroundStyle(.white)
             }
+            // スキャン完了時に枠を光らせ、カメラに集中していても気づけるようにする
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white, lineWidth: 8)
+                .opacity(scanFlashOpacity)
         }
         .frame(height: 280)
     }
