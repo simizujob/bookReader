@@ -40,7 +40,11 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
                 .filter { $0.status == .owned }
                 .compactMap { $0.volumeNumber }
                 .sorted()
-            let seriesName = seriesBooks.first(where: { $0.seriesName != nil })?.seriesName ?? seriesKey
+            // グループ内で最も多く使われている表記を代表シリーズ名として採用する。
+            // Dictionary(grouping:)の要素順は不定であり、単純にfirst(where:)で選ぶと
+            // ムック本・関連グッズ等、表記の異なる少数派の本がたまたま代表に選ばれてしまい、
+            // NDL Searchへの既刊数検索（完全一致ベース）が空振りして「不明」になる不具合があった。
+            let seriesName = Self.mostFrequentSeriesName(in: seriesBooks) ?? seriesKey
 
             let cache = try? metadataCache.cached(seriesKey: seriesKey)
             let (missingVolumes, completionRate, nextVolumeToBuy) = Self.progress(
@@ -90,6 +94,18 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
             ) ?? .distantPast
             return cache.lastFetchedAt < staleDate
         }
+    }
+
+    /// グループ内で最も出現頻度の高いseriesName文字列を返す（同数の場合は文字列としてより小さい方を
+    /// 選び、実行のたびに結果が変わらないようにする）。
+    private static func mostFrequentSeriesName(in books: [Book]) -> String? {
+        let counts = Dictionary(grouping: books.compactMap(\.seriesName), by: { $0 })
+            .mapValues(\.count)
+        return counts
+            .sorted { lhs, rhs in
+                lhs.value != rhs.value ? lhs.value > rhs.value : lhs.key < rhs.key
+            }
+            .first?.key
     }
 
     private static func progress(

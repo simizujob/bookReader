@@ -149,6 +149,35 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         XCTAssertEqual(volumes.last, SeriesVolumeEntry(bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist))
     }
 
+    // MARK: - 代表シリーズ名の決定性（既刊数「不明」フリップフロップの回帰テスト）
+
+    /// 回帰テスト: グループ内に少数派の表記ゆれ（大文字小文字・全角半角違い）が混ざっていると、
+    /// Dictionary(grouping:)の要素順が不定なため単純にfirst(where:)で代表シリーズ名を選ぶと
+    /// 実行（アプリの再起動）ごとに異なる表記が選ばれてしまい、NDL Searchへの既刊数検索
+    /// （タイトル一致ベース）が空振りして既刊数が「不明」になったり戻ったりする不具合があった。
+    /// 多数派の表記が常に安定して選ばれることを確認する。
+    func test_calculateAll_seriesNamePicksMajorityVariantDeterministically() throws {
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 1)
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 2)
+        try insertOwned(seriesName: "HUNTER×HUNTER", volume: 3)
+        try insertOwned(seriesName: "hunter×hunter", volume: 4) // 少数派の表記ゆれ（同一seriesKeyにグルーピングされる）
+
+        let progress = try calculator.calculateAll()
+            .first { $0.seriesKey == SeriesKeyNormalizer.normalize("HUNTER×HUNTER") }
+        XCTAssertEqual(progress?.seriesName, "HUNTER×HUNTER", "多数派の表記が代表シリーズ名として選ばれること")
+    }
+
+    /// 代表シリーズ名の出現数が同数の場合でも、実行のたびに異なる表記が選ばれないこと
+    /// （文字列としてより小さい方を選ぶ、というタイブレークの決定性を確認する）。
+    func test_calculateAll_seriesNameTieBreak_deterministicAcrossRuns() throws {
+        try insertOwned(seriesName: "ALPHA", volume: 1)
+        try insertOwned(seriesName: "Alpha", volume: 2)
+
+        let progress = try calculator.calculateAll()
+            .first { $0.seriesKey == SeriesKeyNormalizer.normalize("Alpha") }
+        XCTAssertEqual(progress?.seriesName, "ALPHA", "同数の場合は常に同じ表記が選ばれ、実行ごとに変わらないこと")
+    }
+
     func test_statusCounts_summarizesByUnifiedStatus() throws {
         try insertOwned(seriesName: "三体", volume: 1) // unread
         let vol2 = try repository.insert(BookDraft(

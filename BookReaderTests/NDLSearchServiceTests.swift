@@ -147,4 +147,16 @@ final class NDLSearchServiceTests: XCTestCase {
         let count = try await service.fetchSeriesVolumeCount(seriesName: "存在しないシリーズ")
         XCTAssertNil(count)
     }
+
+    /// 回帰テスト: 実際に発生した不具合（HUNTER×HUNTERのムック本混在時に既刊数が「不明」に
+    /// なったり戻ったりする）の一因。NDL側の項目タイトルが大文字小文字・全角半角のみ異なる場合、
+    /// 完全一致（==）比較では不一致になり既刊数が「不明」になっていた。
+    /// SeriesKeyNormalizerによる正規化後の比較で表記ゆれを吸収できることを確認する。
+    func test_fetchSeriesVolumeCount_matchesTitlesDifferingOnlyByCaseOrWidth_returnsCount() async throws {
+        let items = (1...5).map { (title: "ＨＵＮＴＥＲ×ＨＵＮＴＥＲ", volume: String($0)) } // 全角+大文字
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "Hunter×Hunter")
+        XCTAssertEqual(count, 5, "大文字小文字・全角半角の表記差は正規化して同一シリーズとみなすこと")
+    }
 }

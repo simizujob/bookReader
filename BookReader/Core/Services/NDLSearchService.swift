@@ -68,9 +68,13 @@ final class NDLSearchService: BookMetadataFetching {
         ]
         guard let url = components.url, let data = try? await fetchData(from: url) else { return nil }
 
+        // タイトルの完全一致（==）は大文字小文字・全角半角等の些細な表記差でも不一致になり、
+        // 同じシリーズなのに既刊数が「不明」になる不具合の原因だった。SeriesKeyNormalizerによる
+        // 正規化後の比較にすることで、表記ゆれを吸収する。
+        let normalizedTarget = SeriesKeyNormalizer.normalize(seriesName)
         let volumes = Set(
             NDLResponseParser().parseAll(data)
-                .filter { $0.title == seriesName }
+                .filter { $0.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget }
                 .compactMap { $0.volume.flatMap(Self.parseDigitsOnly) }
         )
         guard let maxVolume = volumes.max(), maxVolume > 0 else { return nil }
