@@ -59,15 +59,34 @@ struct PreCheckView: View {
             Text("本のバーコードにカメラをかざしてください")
                 .foregroundStyle(.secondary)
         case .error(let message):
-            Text(message).foregroundStyle(.red)
-        case .judged(.owned):
-            resultCard(
-                title: "持っています",
-                subtitle: nil,
-                tint: .green,
-                systemImage: "checkmark.circle.fill"
-            )
-        case .judged(.notOwned):
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message).foregroundStyle(.red)
+                continueScanningButton
+            }
+        case .judged(let result):
+            judgedResult(result)
+        }
+    }
+
+    @ViewBuilder
+    private func judgedResult(_ result: JudgeResult) -> some View {
+        switch result {
+        case .owned:
+            VStack(alignment: .leading, spacing: 8) {
+                resultCard(title: "持っています", subtitle: nil, tint: .green, systemImage: "checkmark.circle.fill")
+                continueScanningButton
+            }
+        case .wishlisted:
+            VStack(alignment: .leading, spacing: 8) {
+                resultCard(
+                    title: "気になるリストに登録済みです",
+                    subtitle: "本棚では未購入として表示されています",
+                    tint: .blue,
+                    systemImage: "bookmark.fill"
+                )
+                continueScanningButton
+            }
+        case .notOwned:
             notOwnedResult
         }
     }
@@ -97,17 +116,25 @@ struct PreCheckView: View {
                     .foregroundStyle(.orange)
             }
 
-            if viewModel.didAddToWishlist {
-                Label("気になるリストに追加しました", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.green)
-            } else {
-                Button("気になるリストへ") {
-                    viewModel.addCurrentResultToWishlist()
+            HStack(spacing: 12) {
+                Button("気になるリストへ登録") {
+                    viewModel.addToWishlistAndContinueScanning()
                 }
                 .buttonStyle(.borderedProminent)
+
+                Button("スキップ") {
+                    viewModel.skipAndContinueScanning()
+                }
+                .buttonStyle(.bordered)
             }
         }
+    }
+
+    private var continueScanningButton: some View {
+        Button("次をスキャン") {
+            viewModel.continueScanning()
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     private func resultCard(title: String, subtitle: String?, tint: Color, systemImage: String) -> some View {
@@ -128,8 +155,9 @@ struct PreCheckView: View {
 
     // MARK: - スキャンした本（画面下部）
 
-    /// 所持判定後、APIで取得したタイトル・表紙画像から「どの本を読み取ったか」を画面下部に表示する。
-    /// 所持済みの場合は登録時にキャッシュ済みのタイトル・表紙を、未所持の場合は非同期取得中/取得結果を表示する。
+    /// 判定後、APIやレコードから取得したタイトル・表紙画像から「どの本を読み取ったか」を画面下部に表示する。
+    /// 所持済み・気になるリスト登録済みの場合は登録時にキャッシュ済みのタイトル・表紙を、
+    /// 未登録の場合は非同期取得中/取得結果を表示する。
     @ViewBuilder
     private var scannedBookFooter: some View {
         if let info = scannedBookInfo {
@@ -160,7 +188,7 @@ struct PreCheckView: View {
 
     private var scannedBookInfo: ScannedBookInfo? {
         switch viewModel.scanState {
-        case .judged(.owned(let book)):
+        case .judged(.owned(let book)), .judged(.wishlisted(let book)):
             return ScannedBookInfo(title: book.title, coverImageURL: book.coverImageURL)
         case .judged(.notOwned):
             guard let title = viewModel.enrichedContext.title else { return nil }

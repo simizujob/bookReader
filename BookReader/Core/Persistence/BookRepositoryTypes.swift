@@ -29,9 +29,11 @@ struct FuzzyMatchResult: Equatable {
 }
 
 /// F-02買う前チェックの判定結果。オフラインで確実に返せる範囲のみを扱う（詳細設計書4.1a）。
-/// .ownedは一致した蔵書レコードを保持し、画面下部の「スキャンした本」表示に使用する。
+/// .owned/.wishlistedは一致した蔵書レコードを保持し、画面下部の「スキャンした本」表示に使用する。
 enum JudgeResult: Equatable {
     case owned(Book)
+    /// 既に「気になる本棚」へ登録済み（未購入）。本棚には登録済みだが所持はしていない状態。
+    case wishlisted(Book)
     case notOwned(possibleEdition: FuzzyMatchResult?)
 }
 

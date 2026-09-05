@@ -88,8 +88,8 @@ final class CoreDataBookRepository: BookRepository {
     // MARK: - 判定
 
     func judge(isbn: String) throws -> JudgeResult {
-        if let existing = try find(isbn: isbn), existing.status == .owned {
-            return .owned(existing)
+        if let existing = try find(isbn: isbn) {
+            return existing.status == .owned ? .owned(existing) : .wishlisted(existing)
         }
         // このISBN単独ではタイトルが未知のため、版違い判定はまだ行わない（詳細設計書4.1a）
         return .notOwned(possibleEdition: nil)

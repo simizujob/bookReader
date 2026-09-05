@@ -38,8 +38,8 @@ final class MockBookRepository: BookRepository {
     }
 
     func judge(isbn: String) throws -> JudgeResult {
-        if let existing = try find(isbn: isbn), existing.status == .owned {
-            return .owned(existing)
+        if let existing = try find(isbn: isbn) {
+            return existing.status == .owned ? .owned(existing) : .wishlisted(existing)
         }
         return .notOwned(possibleEdition: nil)
     }

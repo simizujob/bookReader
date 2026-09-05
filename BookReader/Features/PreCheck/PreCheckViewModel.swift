@@ -2,8 +2,10 @@ import Foundation
 import CoreVideo
 
 /// 買う前チェック（F-02）。詳細設計書5.1・4.1a参照。
-/// judge()はオフラインで確実に返せる所持/未所持のみを同期的に扱い、
+/// judge()はオフラインで確実に返せる所持/気になる登録済み/未登録のみを同期的に扱い、
 /// 「シリーズの一部を所持」等の文脈情報は非同期メタデータ取得後にenrichedContextへ反映する。
+/// 判定結果を表示中は、ユーザーが明示的に次へ進む操作をするまで新しいISBNの検出を無視する
+/// （結果を確認せず次々スキャンされてしまうのを防ぐ仕様）。
 @MainActor
 final class PreCheckViewModel: ObservableObject {
     enum ScanState: Equatable {
@@ -32,7 +34,6 @@ final class PreCheckViewModel: ObservableObject {
     @Published private(set) var scanState: ScanState = .scanning
     @Published private(set) var isLoadingMetadata = false
     @Published private(set) var enrichedContext = EnrichedContext()
-    @Published private(set) var didAddToWishlist = false
     @Published var showManualSearch = false
 
     private var consecutiveDetectionFailures = 0
@@ -65,15 +66,10 @@ final class PreCheckViewModel: ObservableObject {
         onISBNDetected(isbn)
     }
 
-    func addCurrentResultToWishlist() {
+    /// 未登録の本を気になるリストへ登録し、次のスキャンへ進む。
+    func addToWishlistAndContinueScanning() {
         guard case .judged(.notOwned) = scanState, let lastISBN else { return }
         let title = enrichedContext.title ?? "ISBN: \(lastISBN)"
-
-        // 既に同じISBNで登録済み（「気になるリストへ」の連打や再スキャン）なら重複登録しない。
-        if (try? bookRepository.find(isbn: lastISBN)) != nil {
-            didAddToWishlist = true
-            return
-        }
 
         // 既刊数が判明したシリーズは未登録の巻をISBN未確定のプレースホルダーとして
         // 自動登録している（SeriesVolumeCountRefreshService）。同じ巻を実際にスキャンした場合、
@@ -85,7 +81,7 @@ final class PreCheckViewModel: ObservableObject {
                volumeNumber: volumeNumber
            ),
            placeholder.isbn == nil {
-            guard (try? bookRepository.update(
+            _ = try? bookRepository.update(
                 id: placeholder.id,
                 changes: BookChanges(
                     title: title,
@@ -96,40 +92,52 @@ final class PreCheckViewModel: ObservableObject {
                     status: .wishlist,
                     readStatus: placeholder.readStatus
                 )
-            )) != nil else { return }
-            didAddToWishlist = true
-            return
+            )
+        } else {
+            _ = try? bookRepository.insert(BookDraft(
+                isbn: lastISBN,
+                title: title,
+                seriesName: enrichedContext.seriesName,
+                volumeNumber: enrichedContext.volumeNumber,
+                coverImageURL: enrichedContext.coverImageURL,
+                status: .wishlist,
+                readStatus: .unread,
+                metadataFetched: enrichedContext.isResolvedFromAPI
+            ))
         }
+        resetForNextScan()
+    }
 
-        guard (try? bookRepository.insert(BookDraft(
-            isbn: lastISBN,
-            title: title,
-            seriesName: enrichedContext.seriesName,
-            volumeNumber: enrichedContext.volumeNumber,
-            coverImageURL: enrichedContext.coverImageURL,
-            status: .wishlist,
-            readStatus: .unread,
-            metadataFetched: enrichedContext.isResolvedFromAPI
-        ))) != nil else { return }
-        didAddToWishlist = true
+    /// 登録せずに次のスキャンへ進む。
+    func skipAndContinueScanning() {
+        resetForNextScan()
+    }
+
+    /// 既に所持済み／気になるリストに登録済みの場合に、そのまま次のスキャンへ進む。
+    func continueScanning() {
+        resetForNextScan()
     }
 
     private var lastISBN: String?
     /// テストからメタデータ取得の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
     private(set) var enrichmentTask: Task<Void, Never>?
 
+    private func resetForNextScan() {
+        enrichmentTask?.cancel()
+        enrichmentTask = nil
+        lastISBN = nil
+        enrichedContext = EnrichedContext()
+        scanState = .scanning
+    }
+
     private func onISBNDetected(_ isbn: String) {
-        // カメラが同じ本を映し続けている間、0.4秒間隔で同じISBNが繰り返し検出され続ける。
-        // 既に同じISBNの判定結果を表示中であれば再処理しない（画面のちらつき・
-        // ユーザー操作中の再レンダリングによるタップ取りこぼしを防ぐ）。
-        if isbn == lastISBN, case .judged = scanState {
-            return
-        }
+        // 判定結果（またはエラー）を表示中は、次へ進むボタンが押されるまで新しいISBNの検出を
+        // 無視する。結果を確認する前に次々スキャンされてしまうのを防ぐための仕様変更。
+        guard case .scanning = scanState else { return }
 
         consecutiveDetectionFailures = 0
         lastISBN = isbn
         enrichedContext = EnrichedContext()
-        didAddToWishlist = false
 
         guard let result = try? bookRepository.judge(isbn: isbn) else {
             scanState = .error("判定に失敗しました")
