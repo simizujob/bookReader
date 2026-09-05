@@ -8,6 +8,8 @@ final class ShelfViewModel: ObservableObject {
     @Published private(set) var seriesCards: [SeriesProgress] = []
     @Published private(set) var standaloneBooks: [Book] = []
     @Published var errorMessage: String?
+    @Published var searchText: String = ""
+    @Published var sortOption: ShelfSortOption = .newest
 
     static let overdueThresholdDays = NotificationService.reminderThresholdDays
 
@@ -65,6 +67,31 @@ final class ShelfViewModel: ObservableObject {
             standaloneBooks = try calculator.standaloneBooks()
         } catch {
             errorMessage = "読み込みに失敗しました"
+        }
+    }
+
+    /// 「本」と「シリーズ」を区別せず1つのリストとして表示するための、検索・ソート適用後の一覧。
+    var displayedItems: [ShelfItem] {
+        let all: [ShelfItem] = standaloneBooks.map(ShelfItem.book) + seriesCards.map(ShelfItem.series)
+        let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered = trimmedSearch.isEmpty ? all : all.filter { $0.matches(searchText: trimmedSearch) }
+        return sortOption.sorted(filtered)
+    }
+
+    /// 既刊数不明のシリーズについて、ユーザーが手動で既刊総数を入力した場合の反映処理。
+    /// 既刊数が自動判明した場合と同じ経路（キャッシュ保存＋未登録巻の自動登録）を通すため、
+    /// 以後の自動チェックで上書きされうるその場しのぎの値という位置づけになる。
+    /// テストから完了を待ち合わせるために公開している（本番コードからは未使用）。
+    private(set) var manualVolumeCountTask: Task<Void, Never>?
+
+    func setManualVolumeCount(for series: SeriesProgress, total: Int) {
+        manualVolumeCountTask = Task {
+            await volumeCountRefreshService.setManualVolumeCount(
+                seriesKey: series.seriesKey,
+                seriesName: series.seriesName,
+                total: total
+            )
+            reload()
         }
     }
 

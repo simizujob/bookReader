@@ -16,7 +16,8 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         calculator = SeriesProgressCalculator(bookRepository: repository, metadataCache: cache)
     }
 
-    private func insertOwned(seriesName: String, volume: Int, isbn: String? = nil) throws {
+    @discardableResult
+    private func insertOwned(seriesName: String, volume: Int, isbn: String? = nil) throws -> Book {
         try repository.insert(BookDraft(
             isbn: isbn,
             title: "\(seriesName) \(volume)",
@@ -146,7 +147,10 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         let volumes = try XCTUnwrap(progress?.volumes)
         XCTAssertEqual(volumes.map(\.volumeNumber), [1, 2])
         XCTAssertEqual(volumes.first?.unifiedStatus, .unread)
-        XCTAssertEqual(volumes.last, SeriesVolumeEntry(bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist))
+        XCTAssertEqual(
+            volumes.last,
+            SeriesVolumeEntry(bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist, registeredAt: inserted.registeredAt)
+        )
     }
 
     // MARK: - 代表シリーズ名の決定性（既刊数「不明」フリップフロップの回帰テスト）
@@ -199,6 +203,19 @@ final class SeriesProgressCalculatorTests: XCTestCase {
 
         let keys = try calculator.seriesKeysNeedingRefresh()
         XCTAssertFalse(keys.contains(SeriesKeyNormalizer.normalize("三体")), "既知の値はキャッシュが新しければ再チェック不要のままとすること")
+    }
+
+    /// 本棚統合画面の「登録が新しい順」ソート用。シリーズ内で最も新しく登録された巻の日時が
+    /// シリーズ自体の登録日時として使われること。
+    func test_latestRegisteredAt_usesMostRecentlyRegisteredVolume() throws {
+        let vol1 = try insertOwned(seriesName: "三体", volume: 1)
+
+        Thread.sleep(forTimeInterval: 0.01)
+        let vol2 = try insertOwned(seriesName: "三体", volume: 2)
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        XCTAssertEqual(progress?.latestRegisteredAt, vol2.registeredAt)
+        XCTAssertGreaterThan(vol2.registeredAt, vol1.registeredAt)
     }
 
     func test_statusCounts_summarizesByUnifiedStatus() throws {

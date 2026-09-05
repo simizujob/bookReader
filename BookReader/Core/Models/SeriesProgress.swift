@@ -5,6 +5,7 @@ struct SeriesVolumeEntry: Identifiable, Equatable {
     let bookID: UUID
     let volumeNumber: Int
     let unifiedStatus: UnifiedStatus
+    let registeredAt: Date
     var id: UUID { bookID }
 }
 
@@ -28,6 +29,12 @@ struct SeriesProgress: Identifiable, Equatable {
     var isNearCompletion: Bool {
         guard let rate = completionRate else { return false }
         return rate >= 0.8 || (missingVolumes?.count ?? .max) <= 1
+    }
+
+    /// 本棚統合画面での「登録が新しい順」ソート用。シリーズ内で最も新しく登録された巻の日時を
+    /// シリーズ自体の登録日時とみなす（直近で巻が追加されたシリーズほど上位に来るようにするため）。
+    var latestRegisteredAt: Date {
+        volumes.map(\.registeredAt).max() ?? .distantPast
     }
 
     /// 本棚統合画面でのステータス内訳表示用（例: 未読2・読書中1・読了3）

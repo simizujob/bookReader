@@ -21,39 +21,24 @@ struct ShelfView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 List {
-                    if !viewModel.standaloneBooks.isEmpty {
-                        Section("本") {
-                            ForEach(viewModel.standaloneBooks) { book in
-                                bookRow(book)
-                            }
-                        }
+                    ForEach(viewModel.displayedItems) { item in
+                        row(for: item)
                     }
-                    if !viewModel.seriesCards.isEmpty {
-                        Section("シリーズ") {
-                            ForEach(viewModel.seriesCards) { series in
-                                NavigationLink {
-                                    SeriesDetailView(
-                                        series: series,
-                                        viewModel: viewModel,
-                                        safariURL: $safariURL,
-                                        bookRepository: bookRepository
-                                    )
-                                } label: {
-                                    seriesSummaryRow(series)
-                                }
-                            }
-                        }
-                    }
-                    if viewModel.standaloneBooks.isEmpty && viewModel.seriesCards.isEmpty {
+                    if viewModel.displayedItems.isEmpty {
                         ContentUnavailableView(
-                            "本棚は空です",
+                            viewModel.searchText.isEmpty ? "本棚は空です" : "見つかりませんでした",
                             systemImage: "books.vertical",
-                            description: Text("「買う前チェック」や右上の＋から本を登録すると、ここに表示されます。")
+                            description: Text(
+                                viewModel.searchText.isEmpty
+                                    ? "「買う前チェック」や右上の＋から本を登録すると、ここに表示されます。"
+                                    : "検索条件を変えてお試しください。"
+                            )
                         )
                     }
                 }
                 .listStyle(.plain)
                 .refreshable { await viewModel.refreshSeriesVolumeCounts() }
+                .searchable(text: $viewModel.searchText, prompt: "タイトル・シリーズ名で検索")
 
                 // F-07: 本棚画面にはバナー広告を表示する（買う前チェックの判定結果画面は非表示）
                 adService.bannerView()
@@ -61,6 +46,18 @@ struct ShelfView: View {
             }
             .navigationTitle("本棚")
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Picker("並び替え", selection: $viewModel.sortOption) {
+                            ForEach(ShelfSortOption.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    } label: {
+                        Label("並び替え", systemImage: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("並び替え")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showScanRegister = true
@@ -84,6 +81,25 @@ struct ShelfView: View {
                 Button("OK") { viewModel.errorMessage = nil }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(for item: ShelfItem) -> some View {
+        switch item {
+        case .book(let book):
+            bookRow(book)
+        case .series(let series):
+            NavigationLink {
+                SeriesDetailView(
+                    seriesKey: series.seriesKey,
+                    viewModel: viewModel,
+                    safariURL: $safariURL,
+                    bookRepository: bookRepository
+                )
+            } label: {
+                seriesSummaryRow(series)
             }
         }
     }

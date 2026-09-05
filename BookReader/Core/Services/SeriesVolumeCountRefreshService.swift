@@ -6,6 +6,11 @@ protocol SeriesVolumeCountRefreshing {
     /// 既刊数取得ロジック自体を変更した直後など、「不明」等の古い結果がキャッシュされたまま
     /// 最大30日再取得されない、という状況をユーザー自身がすぐ解消できるようにするために必要。
     func refreshAllSeries() async
+    /// 既刊数が自動では判明しないシリーズについて、ユーザーが手動で入力した数値をその場しのぎの
+    /// 値として採用する。既刊数が判明した場合と全く同じ経路（キャッシュ保存＋未登録の巻の
+    /// 自動登録）を通すため、以後の自動チェック（30日後、または依然不明の場合は毎回）で
+    /// 上書きされうる暫定値という位置づけになる。
+    func setManualVolumeCount(seriesKey: String, seriesName: String, total: Int) async
 }
 
 /// 既刊総数キャッシュの再取得（F-05）。詳細設計書4.2「seriesKeysNeedingRefresh」を実際に
@@ -48,6 +53,18 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
     func refreshAllSeries() async {
         guard let allSeries = try? calculator.calculateAll(), !allSeries.isEmpty else { return }
         await refresh(seriesKeys: allSeries.map(\.seriesKey))
+    }
+
+    func setManualVolumeCount(seriesKey: String, seriesName: String, total: Int) async {
+        guard total > 0, total <= Self.maxPlausibleVolumeCount else { return }
+        try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: total)
+        guard let allSeries = try? calculator.calculateAll(),
+              let series = allSeries.first(where: { $0.seriesKey == seriesKey }) else { return }
+        backfillMissingVolumes(
+            seriesName: seriesName,
+            total: total,
+            existingVolumeNumbers: Set(series.volumes.map(\.volumeNumber))
+        )
     }
 
     private func refresh(seriesKeys: [String]) async {

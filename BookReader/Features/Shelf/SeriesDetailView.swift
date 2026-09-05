@@ -2,25 +2,60 @@ import SwiftUI
 
 /// シリーズ内の巻ごとのステータスを一覧表示・変更する画面。
 /// 本棚一覧のシリーズカードをタップした先に表示される。
+/// seriesKeyで参照し、viewModel.seriesCardsから毎回最新の状態を引くことで、
+/// ステータス変更や既刊数の手動入力が即座に画面へ反映されるようにする。
 struct SeriesDetailView: View {
-    let series: SeriesProgress
+    let seriesKey: String
     @ObservedObject var viewModel: ShelfViewModel
     @Binding var safariURL: IdentifiableURL?
     let bookRepository: BookRepository
 
+    @State private var showVolumeCountEntry = false
+    @State private var volumeCountInput = ""
+
     init(
-        series: SeriesProgress,
+        seriesKey: String,
         viewModel: ShelfViewModel,
         safariURL: Binding<IdentifiableURL?>,
         bookRepository: BookRepository
     ) {
-        self.series = series
+        self.seriesKey = seriesKey
         self.viewModel = viewModel
         self._safariURL = safariURL
         self.bookRepository = bookRepository
     }
 
+    private var series: SeriesProgress? {
+        viewModel.seriesCards.first { $0.seriesKey == seriesKey }
+    }
+
     var body: some View {
+        Group {
+            if let series {
+                content(for: series)
+            } else {
+                ContentUnavailableView("シリーズが見つかりません", systemImage: "questionmark.circle")
+            }
+        }
+        .alert("既刊数を入力", isPresented: $showVolumeCountEntry) {
+            TextField("既刊数", text: $volumeCountInput)
+                .keyboardType(.numberPad)
+            Button("設定する") {
+                if let series, let total = Int(volumeCountInput), total > 0 {
+                    viewModel.setManualVolumeCount(for: series, total: total)
+                }
+                volumeCountInput = ""
+            }
+            Button("不明のまま", role: .cancel) {
+                volumeCountInput = ""
+            }
+        } message: {
+            Text("既刊総数がわかれば入力してください。未登録の巻を気になる本棚へ追加します。")
+        }
+    }
+
+    @ViewBuilder
+    private func content(for series: SeriesProgress) -> some View {
         List {
             Section {
                 if let rate = series.completionRate {
@@ -29,7 +64,14 @@ struct SeriesDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("既刊数不明").font(.subheadline).foregroundStyle(.secondary)
+                    Button {
+                        showVolumeCountEntry = true
+                    } label: {
+                        Text("既刊数不明（タップして入力）")
+                    }
+                    .font(.subheadline)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
 
                 if series.isNearCompletion {
@@ -58,14 +100,21 @@ struct SeriesDetailView: View {
     private func volumeRow(_ entry: SeriesVolumeEntry) -> some View {
         let book = try? bookRepository.find(id: entry.bookID)
         return HStack {
-            if let book {
-                NavigationLink {
-                    BookDetailView(book: book, bookRepository: bookRepository, onChange: viewModel.reload)
-                } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                if let book {
+                    NavigationLink {
+                        BookDetailView(book: book, bookRepository: bookRepository, onChange: viewModel.reload)
+                    } label: {
+                        Text("\(entry.volumeNumber)巻")
+                    }
+                } else {
                     Text("\(entry.volumeNumber)巻")
                 }
-            } else {
-                Text("\(entry.volumeNumber)巻")
+                if let book, entry.unifiedStatus == .unread || entry.unifiedStatus == .reading {
+                    Text("\(viewModel.elapsedDays(for: book))日経過")
+                        .font(.caption)
+                        .foregroundStyle(viewModel.isOverdue(book) ? .orange : .secondary)
+                }
             }
             Spacer()
             // 未購入の巻は実物を持っていないため、スキャンではなくAmazonでの購入導線を明示する。

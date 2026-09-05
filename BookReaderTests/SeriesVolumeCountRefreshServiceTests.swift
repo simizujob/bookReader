@@ -237,6 +237,43 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(cached?.knownTotalVolumes, 3)
     }
 
+    // MARK: - setManualVolumeCount（既刊数不明時のユーザー手動入力）
+
+    func test_setManualVolumeCount_cachesValueAndBackfillsMissingVolumes() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: StubMetadataService(),
+            interRequestDelayNanoseconds: 0
+        )
+
+        await service.setManualVolumeCount(seriesKey: SeriesKeyNormalizer.normalize("三体"), seriesName: "三体", total: 3)
+
+        let cached = try cache.cached(seriesKey: SeriesKeyNormalizer.normalize("三体"))
+        XCTAssertEqual(cached?.knownTotalVolumes, 3)
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        XCTAssertEqual(progress?.volumes.map(\.volumeNumber), [1, 2, 3], "既刊数が判明した場合と同様に未登録の巻を自動登録すること")
+        XCTAssertEqual(progress?.volumes.first { $0.volumeNumber == 2 }?.unifiedStatus, .wishlist)
+    }
+
+    func test_setManualVolumeCount_implausiblyLargeValue_isIgnored() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: StubMetadataService(),
+            interRequestDelayNanoseconds: 0
+        )
+
+        await service.setManualVolumeCount(seriesKey: SeriesKeyNormalizer.normalize("三体"), seriesName: "三体", total: 99999)
+
+        let cached = try cache.cached(seriesKey: SeriesKeyNormalizer.normalize("三体"))
+        XCTAssertNil(cached, "非現実的な値は採用しないこと")
+    }
+
     func test_refreshStaleSeries_noOwnedBooks_doesNothing() async throws {
         let metadataService = StubMetadataService()
         let service = SeriesVolumeCountRefreshService(

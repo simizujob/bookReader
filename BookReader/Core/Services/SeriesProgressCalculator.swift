@@ -60,7 +60,12 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
             let volumeEntries = seriesBooks
                 .compactMap { book -> SeriesVolumeEntry? in
                     guard let volumeNumber = book.volumeNumber else { return nil }
-                    return SeriesVolumeEntry(bookID: book.id, volumeNumber: volumeNumber, unifiedStatus: book.unifiedStatus)
+                    return SeriesVolumeEntry(
+                        bookID: book.id,
+                        volumeNumber: volumeNumber,
+                        unifiedStatus: book.unifiedStatus,
+                        registeredAt: book.registeredAt
+                    )
                 }
                 .sorted { $0.volumeNumber < $1.volumeNumber }
 

@@ -14,8 +14,12 @@ final class ShelfViewModelTests: XCTestCase {
     private final class StubVolumeCountRefreshService: SeriesVolumeCountRefreshing {
         private(set) var refreshStaleSeriesCallCount = 0
         private(set) var refreshAllSeriesCallCount = 0
+        private(set) var manualVolumeCounts: [(seriesKey: String, seriesName: String, total: Int)] = []
         func refreshStaleSeries() async { refreshStaleSeriesCallCount += 1 }
         func refreshAllSeries() async { refreshAllSeriesCallCount += 1 }
+        func setManualVolumeCount(seriesKey: String, seriesName: String, total: Int) async {
+            manualVolumeCounts.append((seriesKey, seriesName, total))
+        }
     }
 
     private func makeBook(
@@ -134,5 +138,82 @@ final class ShelfViewModelTests: XCTestCase {
         let url = viewModel.openStoreSearch(for: makeBook(isbn: "9781111111111"))
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
         XCTAssertEqual(items.first { $0.name == "k" }?.value, "9781111111111")
+    }
+
+    // MARK: - displayedItems（本とシリーズを混同した一覧・検索・ソート）
+
+    /// 回帰テスト: 「本」セクションと「シリーズ」セクションを分けず、1つのリストとして
+    /// 混同表示すること。
+    func test_displayedItems_mixesStandaloneBooksAndSeries() {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        calculator.standalone = [makeBook()]
+        calculator.series = [SeriesProgress(
+            seriesKey: "sanhti", seriesName: "三体", ownedVolumes: [1],
+            missingVolumes: nil, completionRate: nil, nextVolumeToBuy: 2, nextVolumeISBN: nil, volumes: []
+        )]
+
+        let viewModel = ShelfViewModel(bookRepository: repository, calculator: calculator)
+        viewModel.onAppear()
+
+        XCTAssertEqual(viewModel.displayedItems.count, 2)
+    }
+
+    func test_displayedItems_filtersBySearchText() {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        calculator.standalone = [makeBook()] // title: "三体"
+        calculator.series = [SeriesProgress(
+            seriesKey: "onepiece", seriesName: "ONE PIECE", ownedVolumes: [1],
+            missingVolumes: nil, completionRate: nil, nextVolumeToBuy: 2, nextVolumeISBN: nil, volumes: []
+        )]
+
+        let viewModel = ShelfViewModel(bookRepository: repository, calculator: calculator)
+        viewModel.onAppear()
+        viewModel.searchText = "ONE"
+
+        XCTAssertEqual(viewModel.displayedItems.map(\.sortTitle), ["ONE PIECE"])
+    }
+
+    func test_displayedItems_defaultsToNewestFirst() {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        calculator.standalone = [
+            makeBook(daysAgo: 5),
+            makeBook(daysAgo: 0)
+        ]
+
+        let viewModel = ShelfViewModel(bookRepository: repository, calculator: calculator)
+        XCTAssertEqual(viewModel.sortOption, .newest, "初期状態は登録が新しい順であること")
+        viewModel.onAppear()
+
+        XCTAssertEqual(viewModel.displayedItems.first?.latestRegisteredAt, calculator.standalone[1].registeredAt)
+    }
+
+    /// 回帰テスト: 既刊数不明のシリーズについてユーザーが手動で既刊総数を入力した場合、
+    /// 既刊数が判明した場合と同じ経路（SeriesVolumeCountRefreshService）を通し、
+    /// 完了後にreloadして画面へ反映すること。
+    func test_setManualVolumeCount_delegatesToRefreshServiceAndReloads() async {
+        let repository = MockBookRepository()
+        let calculator = StubCalculator()
+        let series = SeriesProgress(
+            seriesKey: "sanhti", seriesName: "三体", ownedVolumes: [1],
+            missingVolumes: nil, completionRate: nil, nextVolumeToBuy: 2, nextVolumeISBN: nil, volumes: []
+        )
+        calculator.series = [series]
+        let refreshService = StubVolumeCountRefreshService()
+
+        let viewModel = ShelfViewModel(
+            bookRepository: repository,
+            calculator: calculator,
+            volumeCountRefreshService: refreshService
+        )
+        viewModel.setManualVolumeCount(for: series, total: 5)
+        await viewModel.manualVolumeCountTask?.value
+
+        XCTAssertEqual(refreshService.manualVolumeCounts.count, 1)
+        XCTAssertEqual(refreshService.manualVolumeCounts.first?.seriesKey, "sanhti")
+        XCTAssertEqual(refreshService.manualVolumeCounts.first?.seriesName, "三体")
+        XCTAssertEqual(refreshService.manualVolumeCounts.first?.total, 5)
     }
 }
