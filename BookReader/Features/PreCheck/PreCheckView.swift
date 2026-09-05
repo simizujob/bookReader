@@ -141,10 +141,18 @@ struct PreCheckView: View {
             }
 
             HStack(spacing: 12) {
-                Button("気になるリストへ登録") {
-                    viewModel.addToWishlistAndContinueScanning()
+                // 本のタイトル・シリーズ情報の取得が完了する前に登録すると、シリーズに
+                // 紐付かない・仮タイトルのままの本ができてしまうため、取得中は登録ボタンを
+                // 出さずローディング表示にする（スキップは情報取得と無関係のためそのまま出す）。
+                if viewModel.isLoadingMetadata {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Button("気になるリストへ登録") {
+                        viewModel.addToWishlistAndContinueScanning()
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
 
                 Button("スキップ") {
                     viewModel.skipAndContinueScanning()
