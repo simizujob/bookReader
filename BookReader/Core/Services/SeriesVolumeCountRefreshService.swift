@@ -38,7 +38,38 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
             guard let seriesName = allBooks.first(where: { $0.seriesKey == seriesKey })?.seriesName else { continue }
             let count = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
             try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: count ?? nil)
+            if let total = count, total > 0 {
+                backfillMissingVolumes(seriesKey: seriesKey, seriesName: seriesName, total: total, existingBooks: allBooks)
+            }
             try? await Task.sleep(nanoseconds: interRequestDelayNanoseconds)
         }
+    }
+
+    /// 既刊総数が判明したシリーズについて、本棚に未登録の巻を「気になる本棚」（未購入）として
+    /// まとめて自動登録する。本棚統合画面でシリーズの全巻を一覧表示し、どの巻が未読／未購入かを
+    /// 一目で分かるようにするためのユーザー要望対応。実物をスキャンせずAmazon等で購入する
+    /// ケースもあるため、ISBNなしのまま登録し購入導線はキーワード検索の購入リンクで代替する。
+    private func backfillMissingVolumes(seriesKey: String, seriesName: String, total: Int, existingBooks: [Book]) {
+        let existingVolumes = Set(
+            existingBooks
+                .filter { $0.seriesKey == seriesKey }
+                .compactMap(\.volumeNumber)
+        )
+        let missing = (1...total).filter { !existingVolumes.contains($0) }
+        guard !missing.isEmpty else { return }
+
+        let drafts = missing.map { volume in
+            BookDraft(
+                isbn: nil,
+                title: "\(seriesName) \(volume)",
+                seriesName: seriesName,
+                volumeNumber: volume,
+                coverImageURL: nil,
+                status: .wishlist,
+                readStatus: .unread,
+                metadataFetched: true
+            )
+        }
+        _ = try? bookRepository.insertBatch(drafts)
     }
 }

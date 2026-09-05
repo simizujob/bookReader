@@ -98,6 +98,66 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertNotNil(cached)
     }
 
+    /// 既刊総数が判明したら、未登録の巻を「気になる本棚」（未購入）としてまとめて自動登録し、
+    /// 本棚統合画面で全巻を一覧表示できるようにする（ユーザー要望対応）。
+    func test_refreshStaleSeries_knownTotalVolumes_backfillsMissingVolumesAsWishlist() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["三体"] = 3
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        let volumes = try XCTUnwrap(progress?.volumes)
+        XCTAssertEqual(volumes.map(\.volumeNumber), [1, 2, 3])
+        XCTAssertEqual(volumes.first { $0.volumeNumber == 1 }?.unifiedStatus, .unread)
+        XCTAssertEqual(volumes.first { $0.volumeNumber == 2 }?.unifiedStatus, .wishlist)
+        XCTAssertEqual(volumes.first { $0.volumeNumber == 3 }?.unifiedStatus, .wishlist)
+    }
+
+    func test_refreshStaleSeries_allVolumesAlreadyRegistered_doesNotDuplicate() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        try insertOwned(seriesName: "三体", volume: 2)
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["三体"] = 2
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        XCTAssertEqual(progress?.volumes.count, 2, "既に全巻登録済みの場合は重複登録しないこと")
+    }
+
+    func test_refreshStaleSeries_metadataServiceReturnsNil_doesNotBackfill() async throws {
+        try insertOwned(seriesName: "ONE PIECE", volume: 1)
+        let metadataService = StubMetadataService() // volumeCountBySeriesNameを設定しない = nilを返す
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "ONE PIECE" }
+        XCTAssertEqual(progress?.volumes.count, 1, "既刊総数が不明な場合は自動登録しないこと")
+    }
+
     func test_refreshStaleSeries_noOwnedBooks_doesNothing() async throws {
         let metadataService = StubMetadataService()
         let service = SeriesVolumeCountRefreshService(

@@ -56,8 +56,9 @@ struct SeriesDetailView: View {
     }
 
     private func volumeRow(_ entry: SeriesVolumeEntry) -> some View {
-        HStack {
-            if let book = try? bookRepository.find(id: entry.bookID) {
+        let book = try? bookRepository.find(id: entry.bookID)
+        return HStack {
+            if let book {
                 NavigationLink {
                     BookDetailView(book: book, bookRepository: bookRepository, onChange: viewModel.reload)
                 } label: {
@@ -67,6 +68,16 @@ struct SeriesDetailView: View {
                 Text("\(entry.volumeNumber)巻")
             }
             Spacer()
+            // 未購入の巻は実物を持っていないため、スキャンではなくAmazonでの購入導線を明示する。
+            if entry.unifiedStatus == .wishlist, let book {
+                Button {
+                    safariURL = IdentifiableURL(url: viewModel.openStoreSearch(for: book))
+                } label: {
+                    Image(systemName: "cart")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("\(entry.volumeNumber)巻を購入")
+            }
             StatusPillMenu(currentStatus: entry.unifiedStatus) { newStatus in
                 viewModel.changeStatus(bookID: entry.bookID, to: newStatus)
             }
