@@ -16,14 +16,14 @@ final class MetadataBackfillServiceTests: XCTestCase {
         ))
 
         let openLibrary = MockOpenLibraryService()
-        openLibrary.metadataByISBN["9784041031400"] = OpenLibraryBookMetadata(
+        openLibrary.metadataByISBN["9784041031400"] = BookMetadata(
             title: "鬼滅の刃 19",
             coverImageURL: "https://example.com/cover.jpg"
         )
 
         let service = MetadataBackfillService(
             bookRepository: repository,
-            openLibraryService: openLibrary,
+            metadataService: openLibrary,
             interRequestDelayNanoseconds: 0
         )
         await service.backfillPendingMetadata()
@@ -51,7 +51,7 @@ final class MetadataBackfillServiceTests: XCTestCase {
 
         let service = MetadataBackfillService(
             bookRepository: repository,
-            openLibraryService: MockOpenLibraryService(),
+            metadataService: MockOpenLibraryService(),
             interRequestDelayNanoseconds: 0
         )
         await service.backfillPendingMetadata()
@@ -73,7 +73,7 @@ final class MetadataBackfillServiceTests: XCTestCase {
         ))
         let openLibrary = MockOpenLibraryService()
 
-        let service = MetadataBackfillService(bookRepository: repository, openLibraryService: openLibrary, interRequestDelayNanoseconds: 0)
+        let service = MetadataBackfillService(bookRepository: repository, metadataService: openLibrary, interRequestDelayNanoseconds: 0)
         await service.backfillPendingMetadata()
 
         XCTAssertTrue(openLibrary.fetchedISBNs.isEmpty)

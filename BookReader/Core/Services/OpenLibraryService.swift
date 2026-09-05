@@ -1,10 +1,5 @@
 import Foundation
 
-struct OpenLibraryBookMetadata: Equatable {
-    let title: String
-    let coverImageURL: String?
-}
-
 enum OpenLibraryError: Error, Equatable {
     case notFound
     case timeout
@@ -12,15 +7,10 @@ enum OpenLibraryError: Error, Equatable {
     case network(String)
 }
 
-protocol OpenLibraryFetching {
-    func fetchMetadata(isbn: String) async throws -> OpenLibraryBookMetadata
-    /// 既刊総数の暫定推定値。Open Libraryは構造化フィールドを提供しないため、
-    /// 検索結果件数を暫定的な既刊総数とみなす（詳細設計書4.7参照、要件定義書14章のリスクを踏まえた暫定ロジック）。
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int?
-}
-
 /// 詳細設計書4.7参照。無料・APIキー不要。
-final class OpenLibraryService: OpenLibraryFetching {
+/// 和書の収載が少ないため（要件定義書14章）、CompositeBookMetadataServiceでは
+/// openBD（日本の書籍に強い）を優先し、本サービスは補完的なフォールバックとして使う。
+final class OpenLibraryService: BookMetadataFetching {
     private let session: URLSession
 
     init(session: URLSession? = nil) {
@@ -33,7 +23,7 @@ final class OpenLibraryService: OpenLibraryFetching {
         }
     }
 
-    func fetchMetadata(isbn: String) async throws -> OpenLibraryBookMetadata {
+    func fetchMetadata(isbn: String) async throws -> BookMetadata {
         guard var components = URLComponents(string: "https://openlibrary.org/api/books") else {
             throw OpenLibraryError.decodingFailed
         }
@@ -63,7 +53,7 @@ final class OpenLibraryService: OpenLibraryFetching {
         }
 
         let coverURL = (entry["cover"] as? [String: Any])?["medium"] as? String
-        return OpenLibraryBookMetadata(title: title, coverImageURL: coverURL)
+        return BookMetadata(title: title, coverImageURL: coverURL)
     }
 
     func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {

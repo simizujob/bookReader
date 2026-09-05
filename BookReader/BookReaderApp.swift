@@ -33,7 +33,7 @@ struct BookReaderApp: App {
             Task {
                 let backfill = MetadataBackfillService(
                     bookRepository: bookRepository,
-                    openLibraryService: OpenLibraryService()
+                    metadataService: CompositeBookMetadataService()
                 )
                 await backfill.backfillPendingMetadata()
             }

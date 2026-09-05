@@ -11,7 +11,7 @@ final class PreCheckViewModelTests: XCTestCase {
             registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
         )
         repository.seed(book)
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9784041031400")
 
@@ -20,7 +20,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_judge_unknownISBN_immediatelyShowsFallbackTitleWithoutEnrichment() {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
 
@@ -36,7 +36,7 @@ final class PreCheckViewModelTests: XCTestCase {
     func test_judge_unknownISBN_openLibraryHasNoData_keepsFallbackTitleAfterEnrichment() async throws {
         // Open Libraryが日本の書籍を収載しておらずnotFoundになるケース
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
         await viewModel.enrichmentTask?.value
@@ -47,7 +47,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_addCurrentResultToWishlist_openLibraryHasNoData_registersWithFallbackTitleAndMetadataFetchedFalse() async throws {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
         await viewModel.enrichmentTask?.value
@@ -62,9 +62,9 @@ final class PreCheckViewModelTests: XCTestCase {
     func test_addCurrentResultToWishlist_openLibraryResolves_parsesSeriesAndVolume() async throws {
         let repository = MockBookRepository()
         let openLibrary = MockOpenLibraryService()
-        openLibrary.metadataByISBN["9782222222222"] = OpenLibraryBookMetadata(title: "鬼滅の刃 20", coverImageURL: nil)
+        openLibrary.metadataByISBN["9782222222222"] = BookMetadata(title: "鬼滅の刃 20", coverImageURL: nil)
 
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: openLibrary)
         viewModel.judge(isbn: "9782222222222")
         await viewModel.enrichmentTask?.value
         viewModel.addCurrentResultToWishlist()
@@ -91,9 +91,9 @@ final class PreCheckViewModelTests: XCTestCase {
         ))
 
         let openLibrary = MockOpenLibraryService()
-        openLibrary.metadataByISBN["9782222222222"] = OpenLibraryBookMetadata(title: "三体", coverImageURL: nil)
+        openLibrary.metadataByISBN["9782222222222"] = BookMetadata(title: "三体", coverImageURL: nil)
 
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: openLibrary)
         viewModel.judge(isbn: "9782222222222")
         await viewModel.enrichmentTask?.value
 
@@ -114,9 +114,9 @@ final class PreCheckViewModelTests: XCTestCase {
         ))
 
         let openLibrary = MockOpenLibraryService()
-        openLibrary.metadataByISBN["9782222222222"] = OpenLibraryBookMetadata(title: "鬼滅の刃 20", coverImageURL: nil)
+        openLibrary.metadataByISBN["9782222222222"] = BookMetadata(title: "鬼滅の刃 20", coverImageURL: nil)
 
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: openLibrary)
         viewModel.judge(isbn: "9782222222222")
         await viewModel.enrichmentTask?.value
 
@@ -126,7 +126,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_addCurrentResultToWishlist_registersAsWishlist() {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
         viewModel.addCurrentResultToWishlist()
@@ -138,7 +138,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_addCurrentResultToWishlist_setsDidAddToWishlistForUIFeedback() {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
         XCTAssertFalse(viewModel.didAddToWishlist)
@@ -149,7 +149,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_addCurrentResultToWishlist_withoutPriorJudgment_doesNothing() {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.addCurrentResultToWishlist()
 
@@ -163,9 +163,9 @@ final class PreCheckViewModelTests: XCTestCase {
     func test_repeatedSameISBNDetection_doesNotResetStateOrLoseWishlistFeedback() async throws {
         let repository = MockBookRepository()
         let openLibrary = MockOpenLibraryService()
-        openLibrary.metadataByISBN["9789999999999"] = OpenLibraryBookMetadata(title: "三体", coverImageURL: nil)
+        openLibrary.metadataByISBN["9789999999999"] = BookMetadata(title: "三体", coverImageURL: nil)
 
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: openLibrary)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: openLibrary)
 
         viewModel.judge(isbn: "9789999999999")
         await viewModel.enrichmentTask?.value
@@ -182,7 +182,7 @@ final class PreCheckViewModelTests: XCTestCase {
 
     func test_differentISBNDetection_resetsStateAndWishlistFeedback() {
         let repository = MockBookRepository()
-        let viewModel = PreCheckViewModel(bookRepository: repository, openLibraryService: MockOpenLibraryService())
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
         viewModel.addCurrentResultToWishlist()

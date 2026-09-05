@@ -21,19 +21,19 @@ final class ScanRegisterViewModel: ObservableObject {
     private let barcodeScanService: BarcodeScanning
     private let ocrService: SpineTextRecognizing
     private let bookRepository: BookRepository
-    private let openLibraryService: OpenLibraryFetching
+    private let metadataService: BookMetadataFetching
     private let ciContext = CIContext()
 
     init(
         barcodeScanService: BarcodeScanning = BarcodeScanService(),
         ocrService: SpineTextRecognizing = SpineOCRService(),
         bookRepository: BookRepository,
-        openLibraryService: OpenLibraryFetching = OpenLibraryService()
+        metadataService: BookMetadataFetching = CompositeBookMetadataService()
     ) {
         self.barcodeScanService = barcodeScanService
         self.ocrService = ocrService
         self.bookRepository = bookRepository
-        self.openLibraryService = openLibraryService
+        self.metadataService = metadataService
     }
 
     /// カメラのライブフレームを検出候補に追加する。既に検出済みのISBNは重複追加しない。
@@ -86,7 +86,7 @@ final class ScanRegisterViewModel: ObservableObject {
                     metadataFetched: true
                 ))
             } else if let isbn = candidate.isbn {
-                if let meta = try? await openLibraryService.fetchMetadata(isbn: isbn) {
+                if let meta = try? await metadataService.fetchMetadata(isbn: isbn) {
                     let parsed = TitleParser.parse(meta.title)
                     drafts.append(BookDraft(
                         isbn: isbn,

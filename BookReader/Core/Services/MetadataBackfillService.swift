@@ -8,16 +8,16 @@ protocol MetadataBackfilling {
 /// アプリのscenePhaseが.activeになったタイミングで呼び出す想定。
 struct MetadataBackfillService: MetadataBackfilling {
     private let bookRepository: BookRepository
-    private let openLibraryService: OpenLibraryFetching
+    private let metadataService: BookMetadataFetching
     private let interRequestDelayNanoseconds: UInt64
 
     init(
         bookRepository: BookRepository,
-        openLibraryService: OpenLibraryFetching,
+        metadataService: BookMetadataFetching,
         interRequestDelayNanoseconds: UInt64 = 200_000_000
     ) {
         self.bookRepository = bookRepository
-        self.openLibraryService = openLibraryService
+        self.metadataService = metadataService
         self.interRequestDelayNanoseconds = interRequestDelayNanoseconds
     }
 
@@ -26,7 +26,7 @@ struct MetadataBackfillService: MetadataBackfilling {
 
         for book in pending {
             guard let isbn = book.isbn else { continue }
-            if let meta = try? await openLibraryService.fetchMetadata(isbn: isbn) {
+            if let meta = try? await metadataService.fetchMetadata(isbn: isbn) {
                 try? bookRepository.applyMetadata(id: book.id, title: meta.title, coverImageURL: meta.coverImageURL)
             }
             try? await Task.sleep(nanoseconds: interRequestDelayNanoseconds)

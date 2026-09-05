@@ -22,8 +22,8 @@ final class PreCheckViewModel: ObservableObject {
         var coverImageURL: String?
         var editionWarning: FuzzyMatchResult?
         var partialSeriesInfo: PartialSeriesInfo?
-        /// trueならtitleはOpen Libraryから正式に取得できたもの。falseなら「ISBN: xxx」の仮表示のみ。
-        /// （Open Libraryは日本の書籍を収載していないことが多く、その場合はfalseのまま残る）
+        /// trueならtitleはAPI（openBD優先／Open Libraryフォールバック）から正式に取得できたもの。
+        /// falseなら「ISBN: xxx」の仮表示のみ（どちらのAPIにも当該ISBNの収載がなかった場合）。
         var isResolvedFromAPI = false
     }
 
@@ -38,16 +38,16 @@ final class PreCheckViewModel: ObservableObject {
 
     private let barcodeScanService: BarcodeScanning
     private let bookRepository: BookRepository
-    private let openLibraryService: OpenLibraryFetching
+    private let metadataService: BookMetadataFetching
 
     init(
         barcodeScanService: BarcodeScanning = BarcodeScanService(),
         bookRepository: BookRepository,
-        openLibraryService: OpenLibraryFetching = OpenLibraryService()
+        metadataService: BookMetadataFetching = CompositeBookMetadataService()
     ) {
         self.barcodeScanService = barcodeScanService
         self.bookRepository = bookRepository
-        self.openLibraryService = openLibraryService
+        self.metadataService = metadataService
     }
 
     func handleCapturedFrame(_ pixelBuffer: CVPixelBuffer) {
@@ -106,7 +106,7 @@ final class PreCheckViewModel: ObservableObject {
         scanState = .judged(result)
 
         if case .notOwned = result {
-            // Open LibraryはISBN未収載のことが多い（日本の書籍は網羅性が低い）ため、
+            // どちらのAPIにもISBN未収載のことがある（特にOpen Libraryは日本の書籍の網羅性が低い）ため、
             // API取得を待たず、まずISBNそのものを仮タイトルとして即時表示する。
             // 取得に成功すればenrichAfterMetadataが正式なタイトル・表紙で上書きする。
             enrichedContext = EnrichedContext(title: "ISBN: \(isbn)")
@@ -127,7 +127,7 @@ final class PreCheckViewModel: ObservableObject {
         isLoadingMetadata = true
         defer { isLoadingMetadata = false }
 
-        guard let meta = try? await openLibraryService.fetchMetadata(isbn: isbn) else { return }
+        guard let meta = try? await metadataService.fetchMetadata(isbn: isbn) else { return }
         guard lastISBN == isbn else { return } // 別の本をスキャンしていたら結果を捨てる
 
         var context = EnrichedContext(title: meta.title, coverImageURL: meta.coverImageURL, isResolvedFromAPI: true)
