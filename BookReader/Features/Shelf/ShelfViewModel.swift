@@ -118,6 +118,16 @@ final class ShelfViewModel: ObservableObject {
         }
     }
 
+    /// シリーズに属する全ての巻（所持・気になる両方）をまとめて削除する。
+    func deleteSeries(_ series: SeriesProgress) {
+        do {
+            try bookRepository.deleteSeries(seriesKey: series.seriesKey)
+            reload()
+        } catch {
+            errorMessage = "削除に失敗しました。もう一度お試しください"
+        }
+    }
+
     func elapsedDays(for book: Book) -> Int {
         book.elapsedDays()
     }

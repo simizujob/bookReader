@@ -130,6 +130,33 @@ final class ShelfViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.standaloneBooks.count, 1, "再取得後に最新のデータへreloadされること")
     }
 
+    /// シリーズの「削除」操作で、そのシリーズに属する全ての巻がまとめて削除され、
+    /// 画面が最新の状態にreloadされること。
+    func test_deleteSeries_removesAllVolumesAndReloads() {
+        let repository = MockBookRepository()
+        let seriesKey = SeriesKeyNormalizer.normalize("三体")
+        repository.seed(Book(
+            id: UUID(), isbn: nil, title: "三体 1", seriesName: "三体", seriesKey: seriesKey,
+            volumeNumber: 1, coverImageURL: nil, status: .owned, readStatus: .unread,
+            registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        ))
+        repository.seed(Book(
+            id: UUID(), isbn: nil, title: "三体 2", seriesName: "三体", seriesKey: seriesKey,
+            volumeNumber: 2, coverImageURL: nil, status: .owned, readStatus: .unread,
+            registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        ))
+        let calculator = StubCalculator()
+        let series = SeriesProgress(
+            seriesKey: seriesKey, seriesName: "三体", ownedVolumes: [1, 2],
+            missingVolumes: nil, completionRate: nil, nextVolumeToBuy: nil, nextVolumeISBN: nil, volumes: []
+        )
+
+        let viewModel = ShelfViewModel(bookRepository: repository, calculator: calculator)
+        viewModel.deleteSeries(series)
+
+        XCTAssertTrue(repository.books.isEmpty, "シリーズに属する全ての巻が削除されること")
+    }
+
     func test_openStoreSearchForBook_usesISBNWhenAvailable() {
         let repository = MockBookRepository()
         let calculator = StubCalculator()

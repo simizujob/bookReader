@@ -9,9 +9,11 @@ struct SeriesDetailView: View {
     @ObservedObject var viewModel: ShelfViewModel
     @Binding var safariURL: IdentifiableURL?
     let bookRepository: BookRepository
+    @Environment(\.dismiss) private var dismiss
 
     @State private var showVolumeCountEntry = false
     @State private var volumeCountInput = ""
+    @State private var showDeleteConfirm = false
 
     init(
         seriesKey: String,
@@ -93,8 +95,27 @@ struct SeriesDetailView: View {
                     volumeRow(entry)
                 }
             }
+
+            Section {
+                Button("シリーズを削除する", role: .destructive) {
+                    showDeleteConfirm = true
+                }
+            }
         }
         .navigationTitle(series.seriesName)
+        .confirmationDialog(
+            "「\(series.seriesName)」を削除しますか？",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("削除する", role: .destructive) {
+                viewModel.deleteSeries(series)
+                dismiss()
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("シリーズ内の全ての巻（\(series.volumes.count)件）が削除されます。この操作は取り消せません。")
+        }
     }
 
     private func volumeRow(_ entry: SeriesVolumeEntry) -> some View {

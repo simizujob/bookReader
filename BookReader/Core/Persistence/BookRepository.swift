@@ -24,6 +24,8 @@ protocol BookRepository {
     @discardableResult func insertBatch(_ drafts: [BookDraft]) throws -> [Book]
     @discardableResult func update(id: UUID, changes: BookChanges) throws -> Book
     func delete(id: UUID) throws
+    /// シリーズに属する全ての巻（所持・気になる両方）をまとめて削除する。
+    func deleteSeries(seriesKey: String) throws
     func applyMetadata(id: UUID, metadata: BookMetadata) throws
 }
 
@@ -185,6 +187,22 @@ final class CoreDataBookRepository: BookRepository {
             context.delete(entity)
             try save()
             afterDelete(deleted)
+        }
+    }
+
+    func deleteSeries(seriesKey: String) throws {
+        try context.performAndWait {
+            let request = BookEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "seriesKey == %@", seriesKey)
+            let entities = try context.fetch(request)
+            let deleted = entities.map(Self.map)
+            for entity in entities {
+                context.delete(entity)
+            }
+            try save()
+            for book in deleted {
+                afterDelete(book)
+            }
         }
     }
 

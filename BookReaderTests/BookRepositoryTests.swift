@@ -151,6 +151,30 @@ final class BookRepositoryTests: XCTestCase {
         }
     }
 
+    func test_deleteSeries_removesAllVolumesInSeriesOnly() throws {
+        try repository.insert(draft(isbn: "9781111111111", title: "鬼滅の刃 1", volumeNumber: 1))
+        try repository.insert(draft(isbn: "9781111111112", title: "鬼滅の刃 2", volumeNumber: 2))
+        let otherSeries = try repository.insert(draft(
+            isbn: "9782222222222", title: "三体 1", seriesName: "三体", volumeNumber: 1
+        ))
+
+        try repository.deleteSeries(seriesKey: SeriesKeyNormalizer.normalize("鬼滅の刃"))
+
+        let remaining = try repository.fetchAll()
+        XCTAssertEqual(remaining.map(\.id), [otherSeries.id], "対象シリーズ以外の本は削除されないこと")
+    }
+
+    func test_deleteSeries_cancelsRemindersForEachDeletedVolume() throws {
+        let vol1 = try repository.insert(draft(isbn: "9781111111111", title: "鬼滅の刃 1", volumeNumber: 1))
+        let vol2 = try repository.insert(draft(isbn: "9781111111112", title: "鬼滅の刃 2", volumeNumber: 2))
+        scheduler = MockReminderScheduler()
+        repository = CoreDataBookRepository(context: persistence.container.viewContext, notificationService: scheduler)
+
+        try repository.deleteSeries(seriesKey: SeriesKeyNormalizer.normalize("鬼滅の刃"))
+
+        XCTAssertEqual(Set(scheduler.cancelledBookIDs), Set([vol1.id, vol2.id]))
+    }
+
     // MARK: - 通知スケジュール遷移ルール（詳細設計書5.6）
 
     func test_insertOwnedUnread_schedulesReminder() throws {

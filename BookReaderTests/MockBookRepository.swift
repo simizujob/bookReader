@@ -115,6 +115,12 @@ final class MockBookRepository: BookRepository {
         books.remove(at: index)
     }
 
+    func deleteSeries(seriesKey: String) throws {
+        let idsToDelete = books.filter { $0.seriesKey == seriesKey }.map(\.id)
+        deletedIDs.append(contentsOf: idsToDelete)
+        books.removeAll { $0.seriesKey == seriesKey }
+    }
+
     func applyMetadata(id: UUID, metadata: BookMetadata) throws {
         guard let index = books.firstIndex(where: { $0.id == id }) else {
             throw PersistenceError.notFound(id)
