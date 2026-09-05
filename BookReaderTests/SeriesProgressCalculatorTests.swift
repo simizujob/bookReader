@@ -54,8 +54,8 @@ final class SeriesProgressCalculatorTests: XCTestCase {
     }
 
     /// 回帰テスト: シリーズ名が未確定の「気になるリストへ」登録本(seriesKey == nil)が
-    /// calculateAll()から漏れても、standaloneWishlistBooks()で拾えること。
-    func test_standaloneWishlistBooks_includesBooksWithoutSeriesKey() throws {
+    /// calculateAll()から漏れても、standaloneBooks()で拾えること。
+    func test_standaloneBooks_includesWishlistBooksWithoutSeriesKey() throws {
         try repository.insert(BookDraft(
             isbn: "9789999999999",
             title: "ISBN: 9789999999999",
@@ -67,7 +67,7 @@ final class SeriesProgressCalculatorTests: XCTestCase {
             metadataFetched: false
         ))
 
-        let standalone = try calculator.standaloneWishlistBooks()
+        let standalone = try calculator.standaloneBooks()
         XCTAssertEqual(standalone.count, 1)
         XCTAssertEqual(standalone.first?.isbn, "9789999999999")
 
@@ -75,8 +75,8 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         XCTAssertTrue(try calculator.calculateAll().isEmpty)
     }
 
-    func test_standaloneWishlistBooks_excludesOwnedAndSeriesBooks() throws {
-        try insertOwned(seriesName: "三体", volume: 1) // seriesKeyあり、status=owned
+    /// 本棚統合画面では所持済みの単発本（旧・積読リスト相当）もstandaloneBooksに含める。
+    func test_standaloneBooks_includesOwnedBooksWithoutSeriesKey() throws {
         try repository.insert(BookDraft(
             isbn: "9789999999999",
             title: "所持済みの単発本",
@@ -88,7 +88,14 @@ final class SeriesProgressCalculatorTests: XCTestCase {
             metadataFetched: true
         ))
 
-        XCTAssertTrue(try calculator.standaloneWishlistBooks().isEmpty)
+        let standalone = try calculator.standaloneBooks()
+        XCTAssertEqual(standalone.count, 1)
+        XCTAssertEqual(standalone.first?.isbn, "9789999999999")
+    }
+
+    func test_standaloneBooks_excludesSeriesBooks() throws {
+        try insertOwned(seriesName: "三体", volume: 1) // seriesKeyあり
+        XCTAssertTrue(try calculator.standaloneBooks().isEmpty)
     }
 
     func test_nextVolumeISBN_resolvedWhenWishlistBookExists() throws {
@@ -124,5 +131,39 @@ final class SeriesProgressCalculatorTests: XCTestCase {
 
         let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
         XCTAssertEqual(progress?.isNearCompletion, true)
+    }
+
+    // MARK: - 本棚統合（volumes / statusCounts）
+
+    func test_volumes_includesOwnedAndWishlistWithUnifiedStatus() throws {
+        try insertOwned(seriesName: "鬼滅の刃", volume: 1)
+        let inserted = try repository.insert(BookDraft(
+            isbn: nil, title: "鬼滅の刃 2", seriesName: "鬼滅の刃", volumeNumber: 2,
+            coverImageURL: nil, status: .wishlist, readStatus: .unread, metadataFetched: true
+        ))
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "鬼滅の刃" }
+        let volumes = try XCTUnwrap(progress?.volumes)
+        XCTAssertEqual(volumes.map(\.volumeNumber), [1, 2])
+        XCTAssertEqual(volumes.first?.unifiedStatus, .unread)
+        XCTAssertEqual(volumes.last, SeriesVolumeEntry(bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist))
+    }
+
+    func test_statusCounts_summarizesByUnifiedStatus() throws {
+        try insertOwned(seriesName: "三体", volume: 1) // unread
+        let vol2 = try repository.insert(BookDraft(
+            isbn: nil, title: "三体 2", seriesName: "三体", volumeNumber: 2,
+            coverImageURL: nil, status: .owned, readStatus: .finished, metadataFetched: true
+        ))
+        try repository.update(
+            id: vol2.id,
+            changes: BookChanges(title: vol2.title, seriesName: vol2.seriesName, volumeNumber: vol2.volumeNumber, status: .owned, readStatus: .finished)
+        )
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
+        let counts = Dictionary(uniqueKeysWithValues: (progress?.statusCounts ?? []).map { ($0.status, $0.count) })
+        XCTAssertEqual(counts[.unread], 1)
+        XCTAssertEqual(counts[.finished], 1)
+        XCTAssertNil(counts[.reading])
     }
 }

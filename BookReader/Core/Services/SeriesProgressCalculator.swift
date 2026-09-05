@@ -2,10 +2,11 @@ import Foundation
 
 protocol SeriesProgressCalculating {
     func calculateAll() throws -> [SeriesProgress]
-    /// シリーズ名が判明しなかった（seriesKeyがnilの）気になるリスト登録本。
+    /// シリーズ名が判明しなかった（seriesKeyがnilの）本。所持・気になるの両方を含む
+    /// （本棚統合画面で「本」セクションとして単独表示するため）。
     /// F-02の「気になるリストへ」はタイトル・シリーズ名未確定のまま登録されることが多いため、
     /// calculateAll()のシリーズカードだけでは表示漏れが起きる（気になる本棚に何も表示されない不具合の原因）。
-    func standaloneWishlistBooks() throws -> [Book]
+    func standaloneBooks() throws -> [Book]
     /// キャッシュの再取得が必要な（未取得、または30日以上古い）シリーズキー一覧。
     /// SeriesVolumeCountRefreshServiceが非同期で既刊総数の再取得をトリガーする際に使用する。
     func seriesKeysNeedingRefresh() throws -> [String]
@@ -52,6 +53,13 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
                 nextVolumeISBN = try? bookRepository.find(seriesKey: seriesKey, volumeNumber: next)?.isbn
             }
 
+            let volumeEntries = seriesBooks
+                .compactMap { book -> SeriesVolumeEntry? in
+                    guard let volumeNumber = book.volumeNumber else { return nil }
+                    return SeriesVolumeEntry(bookID: book.id, volumeNumber: volumeNumber, unifiedStatus: book.unifiedStatus)
+                }
+                .sorted { $0.volumeNumber < $1.volumeNumber }
+
             results.append(SeriesProgress(
                 seriesKey: seriesKey,
                 seriesName: seriesName,
@@ -59,16 +67,17 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
                 missingVolumes: missingVolumes,
                 completionRate: completionRate,
                 nextVolumeToBuy: nextVolumeToBuy,
-                nextVolumeISBN: nextVolumeISBN
+                nextVolumeISBN: nextVolumeISBN,
+                volumes: volumeEntries
             ))
         }
 
         return results.sorted { $0.seriesName < $1.seriesName }
     }
 
-    func standaloneWishlistBooks() throws -> [Book] {
+    func standaloneBooks() throws -> [Book] {
         try bookRepository.fetchAll()
-            .filter { $0.status == .wishlist && $0.seriesKey == nil }
+            .filter { $0.seriesKey == nil }
             .sorted { $0.registeredAt > $1.registeredAt }
     }
 

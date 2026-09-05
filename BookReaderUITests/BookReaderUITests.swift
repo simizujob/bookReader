@@ -34,37 +34,26 @@ final class BookReaderUITests: XCTestCase {
     }
 
     @MainActor
-    func test_launchesAndShowsThreeTabs() throws {
+    func test_launchesAndShowsTwoTabs() throws {
         let app = XCUIApplication()
         addSystemAlertMonitor()
         app.launch()
         app.tap() // ダイアログのinterruption monitorをトリガーするため一度タップする
 
         XCTAssertTrue(app.tabBars.buttons["買う前チェック"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["積読リスト"].exists)
-        XCTAssertTrue(app.tabBars.buttons["気になる本棚"].exists)
+        XCTAssertTrue(app.tabBars.buttons["本棚"].exists)
     }
 
     @MainActor
-    func test_navigatingToTsundokuList_showsNavigationTitle() throws {
+    func test_navigatingToShelf_showsNavigationTitleAndEmptyState() throws {
         let app = XCUIApplication()
         addSystemAlertMonitor()
         app.launch()
         app.tap()
 
-        app.tabBars.buttons["積読リスト"].tap()
-        XCTAssertTrue(app.navigationBars.staticTexts["積読リスト（0冊）"].waitForExistence(timeout: 5))
-    }
-
-    @MainActor
-    func test_navigatingToWishShelf_showsNavigationTitle() throws {
-        let app = XCUIApplication()
-        addSystemAlertMonitor()
-        app.launch()
-        app.tap()
-
-        app.tabBars.buttons["気になる本棚"].tap()
-        XCTAssertTrue(app.navigationBars.staticTexts["気になる本棚"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["本棚"].tap()
+        XCTAssertTrue(app.navigationBars.staticTexts["本棚"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["本棚は空です"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -74,12 +63,12 @@ final class BookReaderUITests: XCTestCase {
         app.launch()
         app.tap()
 
-        app.tabBars.buttons["積読リスト"].tap()
+        app.tabBars.buttons["本棚"].tap()
         app.navigationBars.buttons["本棚に登録"].firstMatch.tap()
 
         XCTAssertTrue(app.navigationBars.staticTexts["本棚に登録"].waitForExistence(timeout: 5))
         app.navigationBars.buttons["閉じる"].tap()
-        XCTAssertTrue(app.navigationBars.staticTexts["積読リスト（0冊）"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars.staticTexts["本棚"].waitForExistence(timeout: 5))
     }
 
     @MainActor
