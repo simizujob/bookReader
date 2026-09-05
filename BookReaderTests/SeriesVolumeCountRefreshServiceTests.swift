@@ -4,15 +4,17 @@ import XCTest
 final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
     private final class StubMetadataService: BookMetadataFetching {
         var volumeCountBySeriesName: [String: Int] = [:]
+        var isbnsBySeriesName: [String: [Int: String]] = [:]
         private(set) var requestedSeriesNames: [String] = []
 
         func fetchMetadata(isbn: String) async throws -> BookMetadata {
             throw BookMetadataError.notFound
         }
 
-        func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+        func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
             requestedSeriesNames.append(seriesName)
-            return volumeCountBySeriesName[seriesName]
+            guard let total = volumeCountBySeriesName[seriesName] else { return nil }
+            return SeriesVolumeCountResult(total: total, isbnsByVolume: isbnsBySeriesName[seriesName] ?? [:])
         }
     }
 
@@ -120,6 +122,29 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(volumes.first { $0.volumeNumber == 1 }?.unifiedStatus, .unread)
         XCTAssertEqual(volumes.first { $0.volumeNumber == 2 }?.unifiedStatus, .wishlist)
         XCTAssertEqual(volumes.first { $0.volumeNumber == 3 }?.unifiedStatus, .wishlist)
+    }
+
+    /// 既刊数がNDL Searchから自動判明した場合、未登録の巻には実ISBNを登録し、Amazon購入リンクが
+    /// キーワード検索ではなくISBN検索になるようにすること。
+    func test_refreshStaleSeries_knownTotalVolumes_backfillsWithRealISBNsFromNDL() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let metadataService = StubMetadataService()
+        metadataService.volumeCountBySeriesName["三体"] = 3
+        metadataService.isbnsBySeriesName["三体"] = [2: "9784000000002", 3: "9784000000003"]
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: metadataService,
+            interRequestDelayNanoseconds: 0
+        )
+        await service.refreshStaleSeries()
+
+        let vol2 = try repository.find(seriesKey: SeriesKeyNormalizer.normalize("三体"), volumeNumber: 2)
+        let vol3 = try repository.find(seriesKey: SeriesKeyNormalizer.normalize("三体"), volumeNumber: 3)
+        XCTAssertEqual(vol2?.isbn, "9784000000002")
+        XCTAssertEqual(vol3?.isbn, "9784000000003")
     }
 
     func test_refreshStaleSeries_allVolumesAlreadyRegistered_doesNotDuplicate() async throws {
@@ -283,6 +308,25 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         let progress = try calculator.calculateAll().first { $0.seriesName == "三体" }
         XCTAssertEqual(progress?.volumes.map(\.volumeNumber), [1, 2, 3], "既刊数が判明した場合と同様に未登録の巻を自動登録すること")
         XCTAssertEqual(progress?.volumes.first { $0.volumeNumber == 2 }?.unifiedStatus, .wishlist)
+    }
+
+    /// 回帰テスト: 巻数を手動設定した場合はNDLの巻ごとのISBNデータが無いため、未登録の巻は
+    /// ISBNなしのまま登録し、Amazon購入リンクはキーワード検索にフォールバックすること
+    /// （実ISBN検索が使えるのは既刊数が自動判明した場合のみ）。
+    func test_setManualVolumeCount_backfillsWithoutISBN() async throws {
+        try insertOwned(seriesName: "三体", volume: 1)
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: StubMetadataService(),
+            interRequestDelayNanoseconds: 0
+        )
+
+        await service.setManualVolumeCount(seriesKey: SeriesKeyNormalizer.normalize("三体"), seriesName: "三体", total: 3)
+
+        let vol2 = try repository.find(seriesKey: SeriesKeyNormalizer.normalize("三体"), volumeNumber: 2)
+        XCTAssertNil(vol2?.isbn, "巻数を手動設定した場合はキーワード検索にフォールバックすること")
     }
 
     func test_setManualVolumeCount_implausiblyLargeValue_isIgnored() async throws {

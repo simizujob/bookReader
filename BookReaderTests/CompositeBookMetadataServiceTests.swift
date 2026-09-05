@@ -4,7 +4,7 @@ import XCTest
 final class CompositeBookMetadataServiceTests: XCTestCase {
     private final class StubSource: BookMetadataFetching {
         var metadata: BookMetadata?
-        var seriesVolumeCount: Int?
+        var seriesVolumeCount: SeriesVolumeCountResult?
         private(set) var fetchMetadataCallCount = 0
 
         func fetchMetadata(isbn: String) async throws -> BookMetadata {
@@ -13,7 +13,7 @@ final class CompositeBookMetadataServiceTests: XCTestCase {
             return metadata
         }
 
-        func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+        func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
             seriesVolumeCount
         }
     }
@@ -73,11 +73,11 @@ final class CompositeBookMetadataServiceTests: XCTestCase {
     func test_fetchSeriesVolumeCount_usesFirstSourceThatHasAValue() async throws {
         let first = StubSource()
         let second = StubSource()
-        second.seriesVolumeCount = 20
+        second.seriesVolumeCount = SeriesVolumeCountResult(total: 20, isbnsByVolume: [:])
 
         let service = CompositeBookMetadataService(sources: [first, second])
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
 
-        XCTAssertEqual(count, 20)
+        XCTAssertEqual(result?.total, 20)
     }
 }

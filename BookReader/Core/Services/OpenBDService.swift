@@ -58,7 +58,7 @@ final class OpenBDService: BookMetadataFetching {
     }
 
     /// openBDには既刊総数の推定に使えるシリーズ横断検索APIがないため未対応。
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
         nil
     }
 }

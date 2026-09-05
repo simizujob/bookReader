@@ -93,7 +93,7 @@ final class NDLSearchService: BookMetadataFetching {
     /// 欠けている場合は16を返す）。18巻のように欠番の先に単発でヒットする巻は、そのISBNだけ
     /// 別レコードでたまたま見つかっただけの可能性があり信頼できないため切り捨てる。
     /// 1巻自体が見つからない場合は連続区間の起点が無く判断できないため不明（nil）とする。
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
         // 「本好きの下剋上 第1部」のような部分割シリーズ名は、NDL側のdc:titleには「部」を
         // 含まないため、検索クエリには部を除いた元のシリーズ名を使い、結果は対象の部の
         // レコードのみに絞り込む。
@@ -113,17 +113,20 @@ final class NDLSearchService: BookMetadataFetching {
         // 同じシリーズなのに既刊数が「不明」になる不具合の原因だった。SeriesKeyNormalizerによる
         // 正規化後の比較にすることで、表記ゆれを吸収する。
         let normalizedTarget = SeriesKeyNormalizer.normalize(queryTitle)
-        let volumes = Set(
-            NDLResponseParser().parseAll(data)
-                .filter(\.isBook) // アニメ円盤・CD等、無関係なメディアを除外する
-                .filter { $0.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget }
-                .compactMap { item -> Int? in
-                    guard let parsed = item.volume.flatMap(NDLVolumeParser.parse) else { return nil }
-                    guard parsed.part == targetPart else { return nil }
-                    return parsed.number
-                }
-        )
-        return Self.longestConsecutiveRun(from: volumes)
+        var volumes: Set<Int> = []
+        var isbnsByVolume: [Int: String] = [:]
+        for item in NDLResponseParser().parseAll(data) where item.isBook { // アニメ円盤・CD等、無関係なメディアを除外する
+            guard item.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget else { continue }
+            guard let parsed = item.volume.flatMap(NDLVolumeParser.parse), parsed.part == targetPart else { continue }
+            volumes.insert(parsed.number)
+            if let isbn = item.isbn, isbnsByVolume[parsed.number] == nil {
+                isbnsByVolume[parsed.number] = isbn
+            }
+        }
+        guard let total = Self.longestConsecutiveRun(from: volumes) else { return nil }
+        // 「1巻から連続して確認できた最大巻」より先の巻（信頼していない範囲）のISBNは持ち出さない。
+        let trustedISBNs = isbnsByVolume.filter { $0.key <= total }
+        return SeriesVolumeCountResult(total: total, isbnsByVolume: trustedISBNs)
     }
 
     /// 1から連番で途切れずに存在する最大値を返す（例: {1,2,3,5,6} → 3）。1が無ければnil。
@@ -169,6 +172,7 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
     struct Item: Equatable {
         var title: String?
         var volume: String?
+        var isbn: String?
         var categories: [String] = []
 
         /// 紙・電子の「本」であることを示す。アニメ円盤（映像資料）やCD（録音資料）等、
@@ -181,6 +185,7 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
     private var insideItem = false
     private var currentElement = ""
     private var currentText = ""
+    private var currentElementIsISBNIdentifier = false
     private var currentItem = Item()
     private var items: [Item] = []
 
@@ -205,6 +210,9 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
     ) {
         currentElement = elementName
         currentText = ""
+        // NDLはISBNを<dc:identifier xsi:type="dcndl:ISBN">タグ（属性で種別を区別）として提供する。
+        // 同じ<dc:identifier>要素がNDLBibID・JPNO等にも使われるため、属性で絞り込む必要がある。
+        currentElementIsISBNIdentifier = elementName == "dc:identifier" && attributeDict["xsi:type"] == "dcndl:ISBN"
         if elementName == "item" {
             insideItem = true
             currentItem = Item()
@@ -231,6 +239,10 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
             if currentItem.title == nil { currentItem.title = text }
         case "dcndl:volume":
             currentItem.volume = text
+        case "dc:identifier":
+            if currentElementIsISBNIdentifier, currentItem.isbn == nil {
+                currentItem.isbn = text.replacingOccurrences(of: "-", with: "")
+            }
         case "category":
             currentItem.categories.append(text)
         case "item":

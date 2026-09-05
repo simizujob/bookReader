@@ -214,13 +214,17 @@ final class NDLSearchServiceTests: XCTestCase {
         let title: String
         let volume: String?
         var categories: [String] = ["図書", "紙"]
+        var isbn: String? = nil
     }
 
     private func makeSeriesSearchXML(items: [FixtureItem]) -> String {
         let itemsXML = items.map { item -> String in
             let volumeTag = item.volume.map { "<dcndl:volume>\($0)</dcndl:volume>" } ?? ""
             let categoryTags = item.categories.map { "<category>\($0)</category>" }.joined()
-            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)</item>"
+            let isbnTag = item.isbn.map {
+                "<dc:identifier xsi:type=\"dcndl:ISBN\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\($0)</dc:identifier>"
+            } ?? ""
+            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)\(isbnTag)</item>"
         }.joined()
         return """
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
@@ -268,8 +272,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = (1...23).map { FixtureItem(title: "鬼滅の刃", volume: String($0)) }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
-        XCTAssertEqual(count, 23)
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(result?.total, 23)
     }
 
     /// 回帰テスト: 実際に確認したONE PIECE（115巻まで欠番なし）のような長期連載作品でも、
@@ -278,8 +282,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = (1...115).map { FixtureItem(title: "ONE PIECE", volume: "巻\($0)") }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
-        XCTAssertEqual(count, 115)
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertEqual(result?.total, 115)
     }
 
     func test_fetchSeriesVolumeCount_gapPartway_returnsOnlyTheLeadingConsecutiveRun() async throws {
@@ -289,8 +293,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = ([1] + Array(10...17)).map { FixtureItem(title: "鬼滅の刃", volume: String($0)) }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
-        XCTAssertEqual(count, 1, "2巻の欠番以降は信頼できないため切り捨て、1巻から連続する区間のみ採用すること")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(result?.total, 1, "2巻の欠番以降は信頼できないため切り捨て、1巻から連続する区間のみ採用すること")
     }
 
     /// 回帰テスト: 実際にNDLで確認したHUNTER×HUNTERのケース（1〜16巻は連続して存在するが
@@ -302,8 +306,8 @@ final class NDLSearchServiceTests: XCTestCase {
         items.append(FixtureItem(title: "HUNTER×HUNTER", volume: "18")) // 17巻は欠番、18巻だけ単発でヒット
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "HUNTER×HUNTER")
-        XCTAssertEqual(count, 16, "17巻の欠番より後の18巻は信頼できないため切り捨て、16巻までを既刊数とすること")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "HUNTER×HUNTER")
+        XCTAssertEqual(result?.total, 16, "17巻の欠番より後の18巻は信頼できないため切り捨て、16巻までを既刊数とすること")
     }
 
     func test_fetchSeriesVolumeCount_firstVolumeMissing_returnsNil() async throws {
@@ -311,8 +315,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = (2...5).map { FixtureItem(title: "鬼滅の刃", volume: String($0)) }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
-        XCTAssertNil(count, "1巻が見つからない場合は不明とすること")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertNil(result, "1巻が見つからない場合は不明とすること")
     }
 
     /// 回帰テスト: 実際に確認したONE PIECEのケース（dcndl:volumeが"巻1"〜"巻N"表記）。
@@ -321,8 +325,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = (1...3).map { FixtureItem(title: "ONE PIECE", volume: "巻\($0)") }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
-        XCTAssertEqual(count, 3)
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertEqual(result?.total, 3)
     }
 
     func test_fetchSeriesVolumeCount_ignoresMagazineIssueNumberFormat() async throws {
@@ -334,8 +338,8 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
-        XCTAssertNil(count)
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertNil(result)
     }
 
     func test_fetchSeriesVolumeCount_ignoresItemsWithDifferentTitle() async throws {
@@ -343,8 +347,8 @@ final class NDLSearchServiceTests: XCTestCase {
         items.append(FixtureItem(title: "鬼滅の刃イラスト集", volume: "10")) // タイトル完全一致しない関連グッズ等
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
-        XCTAssertEqual(count, 5, "タイトルが完全一致しない項目（関連グッズ等）は既刊数の計算に含めないこと")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(result?.total, 5, "タイトルが完全一致しない項目（関連グッズ等）は既刊数の計算に含めないこと")
     }
 
     /// 回帰テスト: タイトルが一致していても、図書以外のメディア（アニメ円盤・CD等）は
@@ -355,14 +359,14 @@ final class NDLSearchServiceTests: XCTestCase {
         items.append(FixtureItem(title: "銀魂", volume: "6", categories: ["映像資料", "記録メディア"]))
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "銀魂")
-        XCTAssertEqual(count, 5, "図書以外のメディアの巻数は既刊数の計算に含めないこと")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "銀魂")
+        XCTAssertEqual(result?.total, 5, "図書以外のメディアの巻数は既刊数の計算に含めないこと")
     }
 
     func test_fetchSeriesVolumeCount_noMatchingItems_returnsNil() async throws {
         let service = makeService(xml: makeSeriesSearchXML(items: []))
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "存在しないシリーズ")
-        XCTAssertNil(count)
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "存在しないシリーズ")
+        XCTAssertNil(result)
     }
 
     /// 回帰テスト: 実際に発生した不具合（HUNTER×HUNTERのムック本混在時に既刊数が「不明」に
@@ -373,8 +377,8 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = (1...5).map { FixtureItem(title: "ＨＵＮＴＥＲ×ＨＵＮＴＥＲ", volume: String($0)) } // 全角+大文字
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "Hunter×Hunter")
-        XCTAssertEqual(count, 5, "大文字小文字・全角半角の表記差は正規化して同一シリーズとみなすこと")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "Hunter×Hunter")
+        XCTAssertEqual(result?.total, 5, "大文字小文字・全角半角の表記差は正規化して同一シリーズとみなすこと")
     }
 
     /// 回帰テスト: 本好きの下剋上のように「タイトル 第N部」というseriesNameで問い合わせた場合、
@@ -384,7 +388,33 @@ final class NDLSearchServiceTests: XCTestCase {
         items += (1...5).map { FixtureItem(title: "本好きの下剋上", volume: "第2部[\($0)]") }
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let count = try await service.fetchSeriesVolumeCount(seriesName: "本好きの下剋上 第1部")
-        XCTAssertEqual(count, 3, "指定した部のレコードのみを対象に既刊数を計算すること")
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "本好きの下剋上 第1部")
+        XCTAssertEqual(result?.total, 3, "指定した部のレコードのみを対象に既刊数を計算すること")
+    }
+
+    /// 既刊数が自動判明した際、巻ごとのISBNも一緒に取得できること（Amazon購入リンクを
+    /// キーワード検索ではなくISBN検索にするため、SeriesVolumeCountRefreshServiceが使用する）。
+    func test_fetchSeriesVolumeCount_collectsISBNPerVolume() async throws {
+        let items = (1...3).map {
+            FixtureItem(title: "鬼滅の刃", volume: String($0), isbn: "978-4-08-000000-\($0)")
+        }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
+        XCTAssertEqual(result?.isbnsByVolume[1], "9784080000001")
+        XCTAssertEqual(result?.isbnsByVolume[2], "9784080000002")
+        XCTAssertEqual(result?.isbnsByVolume[3], "9784080000003")
+    }
+
+    /// 「1巻から連続して確認できた最大巻」より先（信頼していない範囲）のISBNは持ち出さないこと。
+    func test_fetchSeriesVolumeCount_excludesISBNsBeyondTrustedRange() async throws {
+        var items = (1...16).map { FixtureItem(title: "HUNTER×HUNTER", volume: String($0), isbn: "978-4-00-000000-\($0)") }
+        items.append(FixtureItem(title: "HUNTER×HUNTER", volume: "18", isbn: "9784000000018")) // 17巻は欠番
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "HUNTER×HUNTER")
+        XCTAssertEqual(result?.total, 16)
+        XCTAssertNil(result?.isbnsByVolume[18], "信頼していない18巻のISBNは持ち出さないこと")
+        XCTAssertNotNil(result?.isbnsByVolume[16])
     }
 }

@@ -31,6 +31,16 @@ enum BookMetadataError: Error, Equatable {
     case notFound
 }
 
+/// 既刊総数のベストエフォート推定結果。
+struct SeriesVolumeCountResult: Equatable {
+    /// 1巻から連続して確認できた最大巻。
+    let total: Int
+    /// データソースが巻ごとのISBNを構造化フィールドとして提供している場合のみ埋まる
+    /// （現状NDL Searchのみ対応）。全巻自動登録の際、キーワード検索ではなくISBN検索の
+    /// Amazon購入リンクを使えるようにするために保持する。
+    let isbnsByVolume: [Int: String]
+}
+
 /// ISBNから書籍のタイトル・表紙画像を取得するサービスの共通プロトコル。
 /// NDL Search・openBD・Open Libraryなど複数のデータソースを同一インターフェースで扱う。
 protocol BookMetadataFetching {
@@ -40,5 +50,5 @@ protocol BookMetadataFetching {
     /// （読点・生年付記・異体字など）が原因で信頼できないと判明したため採用しない。
     /// 代わりに「1巻から最大巻まで欠番なく検出できた場合のみ」採用し、少しでも歯抜けがあれば
     /// nilを返す（誤った既刊数を自信ありげに表示するより「不明」の方が安全という判断）。
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int?
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult?
 }

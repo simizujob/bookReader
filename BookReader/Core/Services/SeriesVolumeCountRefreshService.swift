@@ -88,14 +88,15 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
         for seriesKey in seriesKeys {
             guard let series = seriesByKey[seriesKey] else { continue }
             let seriesName = series.seriesName
-            let rawCount = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
-            let count = rawCount.flatMap { $0 <= Self.maxPlausibleVolumeCount ? $0 : nil }
-            try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: count)
-            if let total = count, total > 0 {
+            let rawResult = try? await metadataService.fetchSeriesVolumeCount(seriesName: seriesName)
+            let result = rawResult.flatMap { $0.total <= Self.maxPlausibleVolumeCount ? $0 : nil }
+            try? metadataCache.upsert(seriesKey: seriesKey, totalVolumes: result?.total)
+            if let result, result.total > 0 {
                 backfillMissingVolumes(
                     seriesName: seriesName,
-                    total: total,
-                    existingVolumeNumbers: Set(series.volumes.map(\.volumeNumber))
+                    total: result.total,
+                    existingVolumeNumbers: Set(series.volumes.map(\.volumeNumber)),
+                    isbnsByVolume: result.isbnsByVolume
                 )
             }
             try? await Task.sleep(nanoseconds: interRequestDelayNanoseconds)
@@ -104,15 +105,24 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
 
     /// 既刊総数が判明したシリーズについて、本棚に未登録の巻を「気になる本棚」（未購入）として
     /// まとめて自動登録する。本棚統合画面でシリーズの全巻を一覧表示し、どの巻が未読／未購入かを
-    /// 一目で分かるようにするためのユーザー要望対応。実物をスキャンせずAmazon等で購入する
-    /// ケースもあるため、ISBNなしのまま登録し購入導線はキーワード検索の購入リンクで代替する。
-    private func backfillMissingVolumes(seriesName: String, total: Int, existingVolumeNumbers: Set<Int>) {
+    /// 一目で分かるようにするためのユーザー要望対応。
+    /// 既刊数がNDL Searchから自動判明した場合はisbnsByVolumeに巻ごとの実ISBNが入っているため、
+    /// それを使って登録し、Amazon購入リンクがキーワード検索ではなくISBN検索（特定版への直接
+    /// リンク）になるようにする。既刊数をユーザーが手動入力した場合（isbnsByVolumeが空）は、
+    /// 実物をスキャンせず購入するケースを想定し、ISBNなしのまま登録してキーワード検索の
+    /// 購入リンクで代替する。
+    private func backfillMissingVolumes(
+        seriesName: String,
+        total: Int,
+        existingVolumeNumbers: Set<Int>,
+        isbnsByVolume: [Int: String] = [:]
+    ) {
         let missing = (1...total).filter { !existingVolumeNumbers.contains($0) }
         guard !missing.isEmpty else { return }
 
         let drafts = missing.map { volume in
             BookDraft(
-                isbn: nil,
+                isbn: isbnsByVolume[volume],
                 title: "\(seriesName) \(volume)",
                 seriesName: seriesName,
                 volumeNumber: volume,

@@ -62,7 +62,7 @@ final class OpenLibraryService: BookMetadataFetching {
     /// そもそも存在しない（実際に「Hunter×hunter」で検索するとnumFoundは5万件を超え、
     /// これをそのまま既刊総数として採用すると全巻自動登録が暴走する）。
     /// 誤った既刊数を返すよりは常にnilを返す方が安全なため、この情報源は既刊数取得には使わない。
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
         nil
     }
 }

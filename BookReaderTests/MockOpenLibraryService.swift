@@ -3,7 +3,7 @@ import Foundation
 
 final class MockOpenLibraryService: BookMetadataFetching {
     var metadataByISBN: [String: BookMetadata] = [:]
-    var seriesVolumeCountByName: [String: Int] = [:]
+    var seriesVolumeCountByName: [String: SeriesVolumeCountResult] = [:]
     private(set) var fetchedISBNs: [String] = []
 
     func fetchMetadata(isbn: String) async throws -> BookMetadata {
@@ -14,7 +14,7 @@ final class MockOpenLibraryService: BookMetadataFetching {
         return metadata
     }
 
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
         seriesVolumeCountByName[seriesName]
     }
 }

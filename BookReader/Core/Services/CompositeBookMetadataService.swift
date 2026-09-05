@@ -40,10 +40,10 @@ final class CompositeBookMetadataService: BookMetadataFetching {
         return best
     }
 
-    func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+    func fetchSeriesVolumeCount(seriesName: String) async throws -> SeriesVolumeCountResult? {
         for source in sources {
-            if let count = try? await source.fetchSeriesVolumeCount(seriesName: seriesName) {
-                return count
+            if let result = try? await source.fetchSeriesVolumeCount(seriesName: seriesName) {
+                return result
             }
         }
         return nil
