@@ -119,9 +119,12 @@ final class ShelfViewModel: ObservableObject {
     }
 
     /// シリーズに属する全ての巻（所持・気になる両方）をまとめて削除する。
+    /// 既刊総数のキャッシュも合わせて破棄することで、同じシリーズを再度スキャン登録した際に
+    /// 既刊数の再取得（＋全巻自動登録）が正しく走るようにする。
     func deleteSeries(_ series: SeriesProgress) {
         do {
             try bookRepository.deleteSeries(seriesKey: series.seriesKey)
+            volumeCountRefreshService.clearVolumeCountCache(seriesKey: series.seriesKey)
             reload()
         } catch {
             errorMessage = "削除に失敗しました。もう一度お試しください"

@@ -15,10 +15,14 @@ final class ShelfViewModelTests: XCTestCase {
         private(set) var refreshStaleSeriesCallCount = 0
         private(set) var refreshAllSeriesCallCount = 0
         private(set) var manualVolumeCounts: [(seriesKey: String, seriesName: String, total: Int)] = []
+        private(set) var clearedCacheSeriesKeys: [String] = []
         func refreshStaleSeries() async { refreshStaleSeriesCallCount += 1 }
         func refreshAllSeries() async { refreshAllSeriesCallCount += 1 }
         func setManualVolumeCount(seriesKey: String, seriesName: String, total: Int) async {
             manualVolumeCounts.append((seriesKey, seriesName, total))
+        }
+        func clearVolumeCountCache(seriesKey: String) {
+            clearedCacheSeriesKeys.append(seriesKey)
         }
     }
 
@@ -150,11 +154,20 @@ final class ShelfViewModelTests: XCTestCase {
             seriesKey: seriesKey, seriesName: "三体", ownedVolumes: [1, 2],
             missingVolumes: nil, completionRate: nil, nextVolumeToBuy: nil, nextVolumeISBN: nil, volumes: []
         )
+        let refreshService = StubVolumeCountRefreshService()
 
-        let viewModel = ShelfViewModel(bookRepository: repository, calculator: calculator)
+        let viewModel = ShelfViewModel(
+            bookRepository: repository,
+            calculator: calculator,
+            volumeCountRefreshService: refreshService
+        )
         viewModel.deleteSeries(series)
 
         XCTAssertTrue(repository.books.isEmpty, "シリーズに属する全ての巻が削除されること")
+        XCTAssertEqual(
+            refreshService.clearedCacheSeriesKeys, [seriesKey],
+            "既刊総数のキャッシュも合わせて破棄し、再スキャン時に既刊数の再取得が走るようにすること"
+        )
     }
 
     func test_openStoreSearchForBook_usesISBNWhenAvailable() {

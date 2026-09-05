@@ -11,6 +11,11 @@ protocol SeriesVolumeCountRefreshing {
     /// 自動登録）を通すため、以後の自動チェック（30日後、または依然不明の場合は毎回）で
     /// 上書きされうる暫定値という位置づけになる。
     func setManualVolumeCount(seriesKey: String, seriesName: String, total: Int) async
+    /// シリーズ削除時に既刊総数のキャッシュも合わせて破棄する。キャッシュを残したままだと、
+    /// 同じシリーズの巻を再度スキャン登録した際に「既に既刊数は分かっている（かつキャッシュは
+    /// 新しい）」と誤認識し、seriesKeysNeedingRefreshの対象から外れて全巻自動登録が
+    /// 二度と走らなくなってしまう不具合があったため。
+    func clearVolumeCountCache(seriesKey: String)
 }
 
 /// 既刊総数キャッシュの再取得（F-05）。詳細設計書4.2「seriesKeysNeedingRefresh」を実際に
@@ -65,6 +70,10 @@ struct SeriesVolumeCountRefreshService: SeriesVolumeCountRefreshing {
             total: total,
             existingVolumeNumbers: Set(series.volumes.map(\.volumeNumber))
         )
+    }
+
+    func clearVolumeCountCache(seriesKey: String) {
+        try? metadataCache.delete(seriesKey: seriesKey)
     }
 
     private func refresh(seriesKeys: [String]) async {

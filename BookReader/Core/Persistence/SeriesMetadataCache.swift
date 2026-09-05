@@ -8,6 +8,7 @@ struct CachedSeriesMetadata {
 protocol SeriesMetadataCaching {
     func cached(seriesKey: String) throws -> CachedSeriesMetadata?
     func upsert(seriesKey: String, totalVolumes: Int?) throws
+    func delete(seriesKey: String) throws
 }
 
 /// SeriesMetadataCacheEntityへの読み書き。詳細設計書3.2・4.2参照。
@@ -42,6 +43,19 @@ final class CoreDataSeriesMetadataCache: SeriesMetadataCaching {
             entity.knownTotalVolumes = totalVolumes.map { NSNumber(value: $0) }
             entity.lastFetchedAt = Date()
 
+            if context.hasChanges {
+                try context.save()
+            }
+        }
+    }
+
+    func delete(seriesKey: String) throws {
+        try context.performAndWait {
+            let request = SeriesMetadataCacheEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "seriesKey == %@", seriesKey)
+            for entity in try context.fetch(request) {
+                context.delete(entity)
+            }
             if context.hasChanges {
                 try context.save()
             }

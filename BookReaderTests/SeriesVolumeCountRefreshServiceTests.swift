@@ -237,6 +237,33 @@ final class SeriesVolumeCountRefreshServiceTests: XCTestCase {
         XCTAssertEqual(cached?.knownTotalVolumes, 3)
     }
 
+    // MARK: - clearVolumeCountCache（シリーズ削除後の再取得のため）
+
+    /// 回帰テスト: シリーズを削除しても既刊総数のキャッシュを残したままだと、同じシリーズの
+    /// 巻を再度スキャン登録した際に「キャッシュは新しいので再取得不要」と誤認識され、
+    /// 全巻自動登録が二度と走らなくなる不具合があった。キャッシュも合わせて削除することで、
+    /// 次回の再チェック対象に戻ることを確認する。
+    func test_clearVolumeCountCache_removesEntryAndSeriesBecomesEligibleForRefreshAgain() async throws {
+        let seriesKey = SeriesKeyNormalizer.normalize("三体")
+        try cache.upsert(seriesKey: seriesKey, totalVolumes: 5) // 削除前に既刊数が判明していた状態を再現
+
+        let service = SeriesVolumeCountRefreshService(
+            bookRepository: repository,
+            calculator: calculator,
+            metadataCache: cache,
+            metadataService: StubMetadataService(),
+            interRequestDelayNanoseconds: 0
+        )
+        service.clearVolumeCountCache(seriesKey: seriesKey)
+
+        XCTAssertNil(try cache.cached(seriesKey: seriesKey), "キャッシュが削除されていること")
+
+        // シリーズを再スキャン登録した状況を再現し、再チェック対象に含まれることを確認する
+        try insertOwned(seriesName: "三体", volume: 1)
+        let staleKeys = try calculator.seriesKeysNeedingRefresh()
+        XCTAssertTrue(staleKeys.contains(seriesKey), "キャッシュ削除後は再チェック対象に戻ること")
+    }
+
     // MARK: - setManualVolumeCount（既刊数不明時のユーザー手動入力）
 
     func test_setManualVolumeCount_cachesValueAndBackfillsMissingVolumes() async throws {
