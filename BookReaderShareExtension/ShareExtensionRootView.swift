@@ -40,7 +40,7 @@ struct ShareExtensionRootView: View {
         case .loadingURL:
             ProgressView()
         case .unrecognized:
-            Text("Amazonの本の商品ページを認識できませんでした")
+            Text("Amazonの本の商品ページを認識できませんでした。\nKindle版の場合は紙の本（単行本・文庫等）の商品ページを共有してください。")
                 .foregroundStyle(.secondary)
         case .error(let message):
             Text(message).foregroundStyle(.red)

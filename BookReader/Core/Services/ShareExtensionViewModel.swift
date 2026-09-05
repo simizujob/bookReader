@@ -31,18 +31,23 @@ final class ShareExtensionViewModel: ObservableObject {
     private let bookRepository: BookRepository
     private let metadataService: BookMetadataFetching
     private let affiliateLinkService: AffiliateLinking
+    private let paperEditionSearching: PaperEditionSearching
 
-    /// テストからメタデータ取得の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
+    /// テストからメタデータ取得・紙の本再検索の非同期完了を待ち合わせるために公開している
+    /// （本番コードからは未使用）。
     private(set) var enrichmentTask: Task<Void, Never>?
+    private(set) var handleTask: Task<Void, Never>?
 
     init(
         bookRepository: BookRepository,
         metadataService: BookMetadataFetching = CompositeBookMetadataService(),
-        affiliateLinkService: AffiliateLinking = AffiliateLinkService()
+        affiliateLinkService: AffiliateLinking = AffiliateLinkService(),
+        paperEditionSearching: PaperEditionSearching = NDLSearchService()
     ) {
         self.bookRepository = bookRepository
         self.metadataService = metadataService
         self.affiliateLinkService = affiliateLinkService
+        self.paperEditionSearching = paperEditionSearching
     }
 
     /// タグ付きでAmazonの同じ商品ページへ戻るためのURL。ASINを認識できなかった場合はnil。
@@ -51,15 +56,27 @@ final class ShareExtensionViewModel: ObservableObject {
     }
 
     func handle(sharedURL: URL?) {
+        handleTask = Task { await handleAsync(sharedURL: sharedURL) }
+    }
+
+    private func handleAsync(sharedURL: URL?) async {
         let extractedASIN = sharedURL.flatMap(AmazonURLParser.extractASIN(from:))
-        let convertedISBN = extractedASIN.flatMap(ISBNConverter.isbn13(fromASIN:))
+        var resolvedISBN = extractedASIN.flatMap(ISBNConverter.isbn13(fromASIN:))
+
+        // Kindle版等、ASINがISBNとして無効な場合、URLから推測したタイトルで紙の本を
+        // 再検索する（ベストエフォート）。それでも見つからなければ.unrecognizedとし、
+        // 「紙の商品ページを共有してください」等の案内を表示側に委ねる。
+        if resolvedISBN == nil, let sharedURL, let titleHint = AmazonURLParser.extractTitleHint(from: sharedURL) {
+            resolvedISBN = await paperEditionSearching.searchPaperEditionISBN(titleHint: titleHint)
+        }
+
         logger.notice("""
         handle(sharedURL:) url=\(sharedURL?.absoluteString ?? "nil", privacy: .public) \
         asin=\(extractedASIN ?? "nil", privacy: .public) \
-        isbn=\(convertedISBN ?? "nil", privacy: .public)
+        isbn=\(resolvedISBN ?? "nil", privacy: .public)
         """)
 
-        guard let sharedURL, let asin = extractedASIN, let isbn = convertedISBN else {
+        guard let asin = extractedASIN, let isbn = resolvedISBN else {
             state = .unrecognized
             return
         }

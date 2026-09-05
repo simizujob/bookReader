@@ -7,6 +7,12 @@ enum NDLSearchError: Error, Equatable {
     case network(String)
 }
 
+/// Kindle版等、ISBNを持たないAmazon商品ページから紙の本を再検索するための最小限の窓口。
+/// 共有シート機能（買う前チェック）専用。
+protocol PaperEditionSearching {
+    func searchPaperEditionISBN(titleHint: String) async -> String?
+}
+
 /// 国立国会図書館サーチ（https://ndlsearch.ndl.go.jp/）連携。
 /// 国内で出版される書籍は国立国会図書館法により納本が義務付けられているため、
 /// openBD・Open Libraryよりもさらに網羅性が高い（無料・APIキー不要）。
@@ -16,7 +22,7 @@ enum NDLSearchError: Error, Equatable {
 /// 巻数の表記はNDL内でも統一されておらず多数のバリエーションが存在する（NDLVolumeParser参照）。
 /// 安全と判断できるパターンのみを許可リスト化し、それ以外は「不明」として扱う
 /// ベストエフォート方針を採る（要件定義書14章・詳細設計書9章参照）。
-final class NDLSearchService: BookMetadataFetching {
+final class NDLSearchService: BookMetadataFetching, PaperEditionSearching {
     private let session: URLSession
 
     init(session: URLSession? = nil) {
@@ -143,6 +149,33 @@ final class NDLSearchService: BookMetadataFetching {
         // 「1巻から連続して確認できた最大巻」より先の巻（信頼していない範囲）のISBNは持ち出さない。
         let trustedISBNs = isbnsByVolume.filter { $0.key <= total }
         return SeriesVolumeCountResult(total: total, isbnsByVolume: trustedISBNs)
+    }
+
+    /// Kindle版ASINなどISBN変換に失敗した場合、Amazon商品ページURLから推測したタイトルで
+    /// NDLを再検索し、紙の本の候補を探す（ベストエフォート）。タイトルの手掛かりはURLの
+    /// スラグから機械的に切り出したものに過ぎず精度が低いため、実際の書誌タイトルとの類似度が
+    /// 十分に高い候補が1件見つかった場合のみそのISBNを返す。曖昧な場合はnilを返し、
+    /// 呼び出し側が「紙の商品ページを共有してください」等のフォールバック表示を行う。
+    func searchPaperEditionISBN(titleHint: String) async -> String? {
+        guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
+            return nil
+        }
+        components.queryItems = [
+            URLQueryItem(name: "title", value: titleHint),
+            URLQueryItem(name: "cnt", value: "20")
+        ]
+        guard let url = components.url, let data = try? await fetchData(from: url) else { return nil }
+
+        let best = NDLResponseParser().parseAll(data)
+            .filter(\.isBook)
+            .compactMap { item -> (isbn: String, similarity: Double)? in
+                guard let title = item.title, let isbn = item.isbn else { return nil }
+                return (isbn, TitleMatcher.similarity(titleHint, title))
+            }
+            .max { $0.similarity < $1.similarity }
+
+        guard let best, best.similarity >= 0.85 else { return nil }
+        return best.isbn
     }
 
     /// 1から連番で途切れずに存在する最大値を返す（例: {1,2,3,5,6} → 3）。1が無ければnil。

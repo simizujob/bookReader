@@ -436,6 +436,36 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(result?.total, 10, "「巻」付き表記が存在しないタイトルでは裸数字+副題表記を除外しないこと")
     }
 
+    // MARK: - searchPaperEditionISBN（Kindle版ASIN等、ISBN変換に失敗した場合の紙の本再検索）
+
+    /// 回帰テスト: 実機で確認したケース（Kindle版商品ページのURLスラグから推測した
+    /// タイトル"プラチナデータ"で紙の本を再検索する）。類似度が十分高い候補が
+    /// 1件見つかればそのISBNを返すこと。
+    func test_searchPaperEditionISBN_highSimilarityMatch_returnsISBN() async throws {
+        let items = [FixtureItem(title: "プラチナデータ", volume: nil, isbn: "9784344421064")]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let isbn = await service.searchPaperEditionISBN(titleHint: "プラチナデータ")
+        XCTAssertEqual(isbn, "9784344421064")
+    }
+
+    /// URLスラグから推測したタイトルは精度が低いため、類似度が低い場合は
+    /// 誤った本を返さずnilとすること。
+    func test_searchPaperEditionISBN_lowSimilarityMatch_returnsNil() async throws {
+        let items = [FixtureItem(title: "全く関係ない本のタイトル", volume: nil, isbn: "9784344421064")]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let isbn = await service.searchPaperEditionISBN(titleHint: "プラチナデータ")
+        XCTAssertNil(isbn)
+    }
+
+    func test_searchPaperEditionISBN_noMatches_returnsNil() async throws {
+        let service = makeService(xml: makeSeriesSearchXML(items: []))
+
+        let isbn = await service.searchPaperEditionISBN(titleHint: "存在しない本")
+        XCTAssertNil(isbn)
+    }
+
     /// 「1巻から連続して確認できた最大巻」より先（信頼していない範囲）のISBNは持ち出さないこと。
     func test_fetchSeriesVolumeCount_excludesISBNsBeyondTrustedRange() async throws {
         var items = (1...16).map { FixtureItem(title: "HUNTER×HUNTER", volume: String($0), isbn: "978-4-00-000000-\($0)") }

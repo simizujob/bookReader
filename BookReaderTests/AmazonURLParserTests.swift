@@ -26,4 +26,23 @@ final class AmazonURLParserTests: XCTestCase {
         let url = URL(string: "https://example.com/")!
         XCTAssertNil(AmazonURLParser.extractASIN(from: url))
     }
+
+    // MARK: - extractTitleHint（Kindle版ASIN等、ISBN変換に失敗した場合の紙の本再検索用）
+
+    func test_extractTitleHint_titleImprintAuthorFormatSlug_returnsFirstSegment() {
+        // 実機で確認したKindle版商品ページの実例
+        let url = URL(string: "https://www.amazon.co.jp/プラチナデータ-幻冬舎文庫-東野圭吾-ebook/dp/B0872SGFKK")!
+        XCTAssertEqual(AmazonURLParser.extractTitleHint(from: url), "プラチナデータ")
+    }
+
+    func test_extractTitleHint_noSlugBeforeDp_returnsNil() {
+        let url = URL(string: "https://www.amazon.co.jp/dp/4088851306")!
+        XCTAssertNil(AmazonURLParser.extractTitleHint(from: url))
+    }
+
+    func test_extractTitleHint_gpProductPath_returnsNil() {
+        // gp/product形式にはタイトルスラグが付かないため、手掛かりとして使えない
+        let url = URL(string: "https://www.amazon.co.jp/gp/product/4088851306")!
+        XCTAssertNil(AmazonURLParser.extractTitleHint(from: url))
+    }
 }
