@@ -27,6 +27,13 @@ enum NDLVolumeParser {
         /// 「第N部[M]」のように、シリーズが部単位で分割されている場合の部番号。
         /// この場合numberは部内の巻数（M）を表す。
         var part: Int?
+        /// 「巻N」「第N巻」のように「巻」という明示的な単位を伴う表記かどうか。
+        /// 実データ調査の結果、同じタイトルで独自の巻数体系を持つ別編集（総集編・
+        /// アニメコミックス等）が存在するシリーズ（ONE PIECE等）でも、本来の単行本は
+        /// 例外なく「巻」付き表記である一方、別編集側は「N (副題)」のような「巻」なしの
+        /// 裸数字表記しか使わないことを確認済み。NDLSearchServiceはこのフラグを使い、
+        /// 「巻」付き表記が1件でも存在するタイトルでは「巻」なし表記を別編集とみなして除外する。
+        var isExplicitCounter: Bool = false
     }
 
     /// 上下巻・前後編等、同じ巻数を複数の本が共有する際に区別するためのマーカー一覧。
@@ -61,7 +68,8 @@ enum NDLVolumeParser {
 
         for pattern in [plainDigitPattern, kanPrefixPattern, daiKanPattern, volDotPattern, bracketOnlyPattern, genericSubtitlePattern] {
             if let match = pattern.firstMatch(in: text, range: range), let number = int(text, match, 1) {
-                return Result(number: number, marker: nil, part: nil)
+                let isExplicitCounter = pattern === kanPrefixPattern || pattern === daiKanPattern
+                return Result(number: number, marker: nil, part: nil, isExplicitCounter: isExplicitCounter)
             }
         }
 

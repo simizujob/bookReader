@@ -406,6 +406,36 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(result?.isbnsByVolume[3], "9784080000003")
     }
 
+    /// 回帰テスト: 実際に確認したONE PIECEのケース。同じタイトルで、本来の単行本（"巻N"表記、
+    /// ジャンプコミックス）とは別に、総集編/アニメコミックス（"SJR"扱い、"N (副題)"という
+    /// 「巻」なし裸数字+副題の表記、独自の1〜23の巻数体系）が同一タイトルで別途登録されており、
+    /// 両者が混ざると総集編側のISBNが本来の巻のISBNとして誤って採用されてしまっていた。
+    /// 「巻」付き表記が1件でもあれば、「巻」なし表記は別編集とみなして除外すること。
+    func test_fetchSeriesVolumeCount_mixedEditionsWithSameTitle_ignoresNonKanPrefixedReissue() async throws {
+        var items = (1...23).map { volume in
+            FixtureItem(title: "ONE PIECE", volume: "巻\(volume)", isbn: "978410000\(String(format: "%04d", volume))")
+        }
+        // 総集編（SJR）側。独自ISBNを持ち、本来の巻とは無関係。
+        items.append(FixtureItem(title: "ONE PIECE", volume: "1 (東の海編)", isbn: "9784199999901"))
+        items.append(FixtureItem(title: "ONE PIECE", volume: "11 (空島編)", isbn: "9784199999911"))
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertEqual(result?.total, 23)
+        XCTAssertEqual(result?.isbnsByVolume[1], "9784100000001", "総集編側のISBNではなく本来の単行本（巻付き表記）のISBNを採用すること")
+        XCTAssertEqual(result?.isbnsByVolume[11], "9784100000011", "総集編側のISBNではなく本来の単行本（巻付き表記）のISBNを採用すること")
+    }
+
+    /// 回帰テスト: 「巻」付き表記が1件も無いタイトル（ゴールデンカムイ等、裸数字+副題表記のみを
+    /// 使う作品）では、別編集混在フィルタが誤発動せず従来通り全件を既刊数計算に含めること。
+    func test_fetchSeriesVolumeCount_onlyBareSubtitleFormatExists_stillTrustsAllItems() async throws {
+        let items = (1...10).map { FixtureItem(title: "ゴールデンカムイ", volume: "\($0) (副題)") }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let result = try await service.fetchSeriesVolumeCount(seriesName: "ゴールデンカムイ")
+        XCTAssertEqual(result?.total, 10, "「巻」付き表記が存在しないタイトルでは裸数字+副題表記を除外しないこと")
+    }
+
     /// 「1巻から連続して確認できた最大巻」より先（信頼していない範囲）のISBNは持ち出さないこと。
     func test_fetchSeriesVolumeCount_excludesISBNsBeyondTrustedRange() async throws {
         var items = (1...16).map { FixtureItem(title: "HUNTER×HUNTER", volume: String($0), isbn: "978-4-00-000000-\($0)") }

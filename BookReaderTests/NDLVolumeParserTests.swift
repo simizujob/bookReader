@@ -13,12 +13,16 @@ final class NDLVolumeParserTests: XCTestCase {
 
     func test_kanPrefix_isAccepted() {
         // 実際に確認したONE PIECE 115巻のケース
-        XCTAssertEqual(NDLVolumeParser.parse("巻115")?.number, 115)
+        let result = NDLVolumeParser.parse("巻115")
+        XCTAssertEqual(result?.number, 115)
+        XCTAssertEqual(result?.isExplicitCounter, true, "「巻」付き表記は別編集除外フィルタの判定に使うため明示的にtrueであること")
     }
 
     func test_daiKanSuffix_isAccepted() {
         // 実際に確認した銀魂のケース
-        XCTAssertEqual(NDLVolumeParser.parse("第1巻")?.number, 1)
+        let result = NDLVolumeParser.parse("第1巻")
+        XCTAssertEqual(result?.number, 1)
+        XCTAssertEqual(result?.isExplicitCounter, true)
     }
 
     func test_daiKanSuffixWithSubtitle_isAccepted() {
@@ -37,7 +41,9 @@ final class NDLVolumeParserTests: XCTestCase {
 
     func test_numberWithSubtitle_isAccepted() {
         // 実際に確認したゴールデンカムイ・ワンパンマン・ワールドトリガーのケース
-        XCTAssertEqual(NDLVolumeParser.parse("10 (樺太編4)")?.number, 10)
+        let result = NDLVolumeParser.parse("10 (樺太編4)")
+        XCTAssertEqual(result?.number, 10)
+        XCTAssertEqual(result?.isExplicitCounter, false, "「巻」なし裸数字表記は総集編等の別編集の可能性があるためfalseであること")
         XCTAssertEqual(NDLVolumeParser.parse("1 (一撃)")?.number, 1)
         XCTAssertEqual(NDLVolumeParser.parse("04 (巨大隕石)")?.number, 4)
     }

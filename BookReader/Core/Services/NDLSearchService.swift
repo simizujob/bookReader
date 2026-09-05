@@ -113,13 +113,29 @@ final class NDLSearchService: BookMetadataFetching {
         // 同じシリーズなのに既刊数が「不明」になる不具合の原因だった。SeriesKeyNormalizerによる
         // 正規化後の比較にすることで、表記ゆれを吸収する。
         let normalizedTarget = SeriesKeyNormalizer.normalize(queryTitle)
-        var volumes: Set<Int> = []
-        var isbnsByVolume: [Int: String] = [:]
+        var matches: [(parsed: NDLVolumeParser.Result, isbn: String?)] = []
         for item in NDLResponseParser().parseAll(data) where item.isBook { // アニメ円盤・CD等、無関係なメディアを除外する
             guard item.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget else { continue }
             guard let parsed = item.volume.flatMap(NDLVolumeParser.parse), parsed.part == targetPart else { continue }
+            matches.append((parsed, item.isbn))
+        }
+
+        // 同じタイトルのまま独自の巻数体系を持つ別編集（総集編・アニメコミックス等）が
+        // 混在することがある（実データでONE PIECEの「SJR」総集編を確認済み。本来の115巻とは
+        // 無関係な1〜23巻の独自ナンバリングを持ち、副題付きの裸数字表記「1 (東の海編)」等で
+        // 登録されている）。本来の単行本は「巻」付き表記（isExplicitCounter）が例外なく
+        // 使われている一方、別編集側は「巻」なし表記しか使わないため、「巻」付き表記が
+        // 1件でも見つかったタイトルでは、「巻」なし表記の項目を別編集とみなして除外する。
+        // 「巻」付き表記が1件も無いタイトル（ゴールデンカムイ等、裸数字表記のみを使う作品）では
+        // 従来通り全件を信頼する。
+        let hasExplicitCounter = matches.contains { $0.parsed.isExplicitCounter }
+        let trustedMatches = matches.filter { !hasExplicitCounter || $0.parsed.isExplicitCounter }
+
+        var volumes: Set<Int> = []
+        var isbnsByVolume: [Int: String] = [:]
+        for (parsed, isbn) in trustedMatches {
             volumes.insert(parsed.number)
-            if let isbn = item.isbn, isbnsByVolume[parsed.number] == nil {
+            if let isbn, isbnsByVolume[parsed.number] == nil {
                 isbnsByVolume[parsed.number] = isbn
             }
         }
