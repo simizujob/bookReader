@@ -13,9 +13,9 @@ enum NDLSearchError: Error, Equatable {
 /// 巻数（dcndl:volume）を構造化フィールドとして提供するため、TitleParserによる
 /// タイトル文字列からの推定よりも信頼できる。ただし表紙画像は提供されない。
 ///
-/// 巻数の表記はNDL内でも統一されておらず、数字のみ（"5"）・「巻」+数字（"巻90"）・
-/// 古い登録の漢数字（"巻一"）などが混在することを実データで確認済み。ベストエフォート方針として
-/// 数字のみの表記だけを対象とし、それ以外は「不明」として扱う（要件定義書14章・詳細設計書9章参照）。
+/// 巻数の表記はNDL内でも統一されておらず多数のバリエーションが存在する（NDLVolumeParser参照）。
+/// 安全と判断できるパターンのみを許可リスト化し、それ以外は「不明」として扱う
+/// ベストエフォート方針を採る（要件定義書14章・詳細設計書9章参照）。
 final class NDLSearchService: BookMetadataFetching {
     private let session: URLSession
 
@@ -37,7 +37,7 @@ final class NDLSearchService: BookMetadataFetching {
         guard let url = components.url else { throw NDLSearchError.decodingFailed }
 
         let data = try await fetchData(from: url)
-        let items = NDLResponseParser().parseAll(data)
+        let items = NDLResponseParser().parseAll(data).filter(\.isBook)
         guard let title = Self.preferredTitle(among: items), !title.isEmpty else {
             throw NDLSearchError.notFound
         }
@@ -47,11 +47,21 @@ final class NDLSearchService: BookMetadataFetching {
         // 他の巻と同じ体裁のタイトルを持つレコードが別々に存在する）。片方だけを見ると、
         // タイトル表記のズレでシリーズが分裂したり、巻数が取得できなかったりするため、
         // 全レコードを横断してタイトル・巻数それぞれ最も使えるものを選ぶ。
-        let volume = items.lazy.compactMap { $0.volume.flatMap(Self.parseDigitsOnly) }.first
-        if let volume {
-            return BookMetadata(title: "\(title) \(volume)", seriesName: title, volumeNumber: volume)
+        guard let parsed = items.lazy.compactMap({ $0.volume.flatMap(NDLVolumeParser.parse) }).first else {
+            return BookMetadata(title: title)
         }
-        return BookMetadata(title: title)
+
+        // 「第1部[2]」のように部単位で巻数が振り直されるシリーズは、部ごとに別シリーズとして扱う
+        // （そうしないと部をまたいで同じ巻数が重複し、既刊数判定が意味を成さなくなるため）。
+        let seriesName = parsed.part.map { "\(title) 第\($0)部" } ?? title
+        // 上巻/中巻/下巻のように同じ巻数を複数の本が共有する場合は、タイトル末尾にマーカーを
+        // 残しておく（SeriesProgressCalculatorが本棚の巻一覧で見分けられるようにするため）。
+        let volumeLabel = parsed.marker.map { "\(parsed.number)(\($0))" } ?? "\(parsed.number)"
+        return BookMetadata(
+            title: "\(seriesName) \(volumeLabel)",
+            seriesName: seriesName,
+            volumeNumber: parsed.number
+        )
     }
 
     /// NDLの並列タイトル表記（例: "Hunter×hunter = ハンター ハンター"）はISBD形式の代替タイトル
@@ -63,7 +73,7 @@ final class NDLSearchService: BookMetadataFetching {
     }
 
     /// 既刊総数のベストエフォート推定。タイトルで検索し、タイトルが完全一致かつ巻数が
-    /// 数字のみで表記されている項目を集める。
+    /// NDLVolumeParserで安全と判断できる表記の項目を集める。
     ///
     /// 著者名によるクエリ絞り込みは検証の結果採用しないことにした（生データの読点・生年付記・
     /// 異体字などの表記ゆれが原因で、プログラム的に正しいクエリを組み立てられないことを確認済み）。
@@ -75,11 +85,16 @@ final class NDLSearchService: BookMetadataFetching {
     /// 別レコードでたまたま見つかっただけの可能性があり信頼できないため切り捨てる。
     /// 1巻自体が見つからない場合は連続区間の起点が無く判断できないため不明（nil）とする。
     func fetchSeriesVolumeCount(seriesName: String) async throws -> Int? {
+        // 「本好きの下剋上 第1部」のような部分割シリーズ名は、NDL側のdc:titleには「部」を
+        // 含まないため、検索クエリには部を除いた元のシリーズ名を使い、結果は対象の部の
+        // レコードのみに絞り込む。
+        let (queryTitle, targetPart) = Self.splitPartSuffix(seriesName)
+
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return nil
         }
         components.queryItems = [
-            URLQueryItem(name: "title", value: seriesName),
+            URLQueryItem(name: "title", value: queryTitle),
             URLQueryItem(name: "cnt", value: "200")
         ]
         guard let url = components.url, let data = try? await fetchData(from: url) else { return nil }
@@ -87,11 +102,16 @@ final class NDLSearchService: BookMetadataFetching {
         // タイトルの完全一致（==）は大文字小文字・全角半角等の些細な表記差でも不一致になり、
         // 同じシリーズなのに既刊数が「不明」になる不具合の原因だった。SeriesKeyNormalizerによる
         // 正規化後の比較にすることで、表記ゆれを吸収する。
-        let normalizedTarget = SeriesKeyNormalizer.normalize(seriesName)
+        let normalizedTarget = SeriesKeyNormalizer.normalize(queryTitle)
         let volumes = Set(
             NDLResponseParser().parseAll(data)
+                .filter(\.isBook) // アニメ円盤・CD等、無関係なメディアを除外する
                 .filter { $0.title.map(SeriesKeyNormalizer.normalize) == normalizedTarget }
-                .compactMap { $0.volume.flatMap(Self.parseDigitsOnly) }
+                .compactMap { item -> Int? in
+                    guard let parsed = item.volume.flatMap(NDLVolumeParser.parse) else { return nil }
+                    guard parsed.part == targetPart else { return nil }
+                    return parsed.number
+                }
         )
         return Self.longestConsecutiveRun(from: volumes)
     }
@@ -106,10 +126,19 @@ final class NDLSearchService: BookMetadataFetching {
         return latest
     }
 
-    /// 数字のみで構成された巻数表記のみを受け付ける（"5" は可、"巻5"・"巻一"・"No. 71" は不可）。
-    private static func parseDigitsOnly(_ text: String) -> Int? {
-        guard text.range(of: #"^\d+$"#, options: .regularExpression) != nil else { return nil }
-        return Int(text)
+    private static let partSuffixPattern = try! NSRegularExpression(pattern: #"^(.+) 第(\d+)部$"#)
+
+    /// 「タイトル 第N部」から元のタイトルと部番号を取り出す。部分割でなければ(seriesName, nil)を返す。
+    private static func splitPartSuffix(_ seriesName: String) -> (queryTitle: String, part: Int?) {
+        let range = NSRange(seriesName.startIndex..<seriesName.endIndex, in: seriesName)
+        guard let match = partSuffixPattern.firstMatch(in: seriesName, range: range),
+              let titleRange = Range(match.range(at: 1), in: seriesName),
+              let partRange = Range(match.range(at: 2), in: seriesName),
+              let part = Int(seriesName[partRange])
+        else {
+            return (seriesName, nil)
+        }
+        return (String(seriesName[titleRange]), part)
     }
 
     private func fetchData(from url: URL) async throws -> Data {
@@ -130,6 +159,13 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
     struct Item: Equatable {
         var title: String?
         var volume: String?
+        var categories: [String] = []
+
+        /// 紙・電子の「本」であることを示す。アニメ円盤（映像資料）やCD（録音資料）等、
+        /// タイトルは一致するが巻数の意味が全く異なる無関係なメディアを除外するために使う
+        /// （実データで、タイトルが一致する漫画のアニメBlu-rayが独自の巻数体系で
+        /// 混在することを確認済み）。
+        var isBook: Bool { categories.contains("図書") }
     }
 
     private var insideItem = false
@@ -185,6 +221,8 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
             if currentItem.title == nil { currentItem.title = text }
         case "dcndl:volume":
             currentItem.volume = text
+        case "category":
+            currentItem.categories.append(text)
         case "item":
             items.append(currentItem)
             insideItem = false

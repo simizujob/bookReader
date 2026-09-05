@@ -43,8 +43,8 @@ final class ShelfItemTests: XCTestCase {
         let older = Date(timeIntervalSince1970: 1000)
         let newer = Date(timeIntervalSince1970: 2000)
         let series = ShelfItem.series(makeSeries(volumes: [
-            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 1, unifiedStatus: .unread, registeredAt: older),
-            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 2, unifiedStatus: .unread, registeredAt: newer)
+            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 1, unifiedStatus: .unread, registeredAt: older, displayLabel: "1巻"),
+            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 2, unifiedStatus: .unread, registeredAt: newer, displayLabel: "2巻")
         ]))
 
         XCTAssertEqual(series.latestRegisteredAt, newer)
@@ -54,8 +54,8 @@ final class ShelfItemTests: XCTestCase {
     /// 最も進捗が浅い（未購入に近い）ステータスを採用する。
     func test_sortStatus_seriesUsesLeastProgressedVolume() {
         let series = ShelfItem.series(makeSeries(volumes: [
-            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 1, unifiedStatus: .finished, registeredAt: Date()),
-            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 2, unifiedStatus: .unread, registeredAt: Date())
+            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 1, unifiedStatus: .finished, registeredAt: Date(), displayLabel: "1巻"),
+            SeriesVolumeEntry(bookID: UUID(), volumeNumber: 2, unifiedStatus: .unread, registeredAt: Date(), displayLabel: "2巻")
         ]))
 
         XCTAssertEqual(series.sortStatus, .unread)

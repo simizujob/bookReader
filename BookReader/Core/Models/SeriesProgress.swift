@@ -6,6 +6,9 @@ struct SeriesVolumeEntry: Identifiable, Equatable {
     let volumeNumber: Int
     let unifiedStatus: UnifiedStatus
     let registeredAt: Date
+    /// 本棚の巻一覧に表示するラベル（例: "1巻"、上下巻等では"1巻（上）"）。
+    /// 同じvolumeNumberを複数の本が共有する場合（上巻/中巻/下巻等）でも見分けられるようにする。
+    let displayLabel: String
     var id: UUID { bookID }
 }
 

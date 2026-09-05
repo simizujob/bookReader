@@ -105,10 +105,10 @@ struct SeriesDetailView: View {
                     NavigationLink {
                         BookDetailView(book: book, bookRepository: bookRepository, onChange: viewModel.reload)
                     } label: {
-                        Text("\(entry.volumeNumber)巻")
+                        Text(entry.displayLabel)
                     }
                 } else {
-                    Text("\(entry.volumeNumber)巻")
+                    Text(entry.displayLabel)
                 }
                 if let book, entry.unifiedStatus == .unread || entry.unifiedStatus == .reading {
                     Text("\(viewModel.elapsedDays(for: book))日経過")
@@ -125,7 +125,7 @@ struct SeriesDetailView: View {
                     Image(systemName: "cart")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel("\(entry.volumeNumber)巻を購入")
+                .accessibilityLabel("\(entry.displayLabel)を購入")
                 // ステータス変更ピルとの誤タップを防ぐため間隔を空ける
                 .padding(.trailing, 16)
             }

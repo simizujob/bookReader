@@ -149,7 +149,10 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         XCTAssertEqual(volumes.first?.unifiedStatus, .unread)
         XCTAssertEqual(
             volumes.last,
-            SeriesVolumeEntry(bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist, registeredAt: inserted.registeredAt)
+            SeriesVolumeEntry(
+                bookID: inserted.id, volumeNumber: 2, unifiedStatus: .wishlist,
+                registeredAt: inserted.registeredAt, displayLabel: "2巻"
+            )
         )
     }
 
@@ -180,6 +183,24 @@ final class SeriesProgressCalculatorTests: XCTestCase {
         let progress = try calculator.calculateAll()
             .first { $0.seriesKey == SeriesKeyNormalizer.normalize("Alpha") }
         XCTAssertEqual(progress?.seriesName, "ALPHA", "同数の場合は常に同じ表記が選ばれ、実行ごとに変わらないこと")
+    }
+
+    /// 回帰テスト: 上巻/中巻/下巻等、同じ巻数を複数の本が共有する場合に、
+    /// NDLSearchServiceが構築したタイトル末尾のマーカー（例:「1(上)」）を表示ラベルに反映し、
+    /// 本棚の巻一覧で見分けられるようにすること。
+    func test_volumes_displayLabel_reflectsSplitVolumeMarkerFromTitle() throws {
+        try repository.insert(BookDraft(
+            isbn: nil, title: "転生したらスライムだった件 1(上)", seriesName: "転生したらスライムだった件",
+            volumeNumber: 1, coverImageURL: nil, status: .owned, readStatus: .unread, metadataFetched: true
+        ))
+        try repository.insert(BookDraft(
+            isbn: nil, title: "転生したらスライムだった件 1(下)", seriesName: "転生したらスライムだった件",
+            volumeNumber: 1, coverImageURL: nil, status: .owned, readStatus: .unread, metadataFetched: true
+        ))
+
+        let progress = try calculator.calculateAll().first { $0.seriesName == "転生したらスライムだった件" }
+        let labels = try XCTUnwrap(progress?.volumes.map(\.displayLabel))
+        XCTAssertEqual(Set(labels), ["1巻（上）", "1巻（下）"], "同じ巻数でもマーカーで見分けられること")
     }
 
     // MARK: - seriesKeysNeedingRefresh（既刊数「不明」の再チェック）

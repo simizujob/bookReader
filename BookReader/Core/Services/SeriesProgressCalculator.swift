@@ -64,7 +64,8 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
                         bookID: book.id,
                         volumeNumber: volumeNumber,
                         unifiedStatus: book.unifiedStatus,
-                        registeredAt: book.registeredAt
+                        registeredAt: book.registeredAt,
+                        displayLabel: Self.volumeDisplayLabel(volumeNumber: volumeNumber, title: book.title)
                     )
                 }
                 .sorted { $0.volumeNumber < $1.volumeNumber }
@@ -107,6 +108,23 @@ final class SeriesProgressCalculator: SeriesProgressCalculating {
             ) ?? .distantPast
             return cache.lastFetchedAt < staleDate
         }
+    }
+
+    private static let volumeMarkerSuffixPattern = try! NSRegularExpression(
+        pattern: #"\((上|中|下|前編|中編|後編)\)$"#
+    )
+
+    /// 上巻/中巻/下巻等、同じvolumeNumberを複数の本が共有する場合に見分けられるよう、
+    /// NDLSearchServiceが構築したタイトル末尾のマーカー（例:「作品名 1(上)」の"(上)"）があれば
+    /// 表示ラベルに残す。無ければ単純な「N巻」を返す。
+    private static func volumeDisplayLabel(volumeNumber: Int, title: String) -> String {
+        let range = NSRange(title.startIndex..<title.endIndex, in: title)
+        guard let match = volumeMarkerSuffixPattern.firstMatch(in: title, range: range),
+              let markerRange = Range(match.range(at: 1), in: title)
+        else {
+            return "\(volumeNumber)巻"
+        }
+        return "\(volumeNumber)巻（\(title[markerRange])）"
     }
 
     /// グループ内で最も出現頻度の高いseriesName文字列を返す（同数の場合は文字列としてより小さい方を
