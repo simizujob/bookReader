@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "simizuatusi.com.BookReader.ShareExtension", category: "ShareExtensionViewModel")
 
 /// 共有シート版「買う前チェック」。Amazon商品ページのURLを受け取り、ASIN→ISBN変換のうえ
 /// カメラ版のPreCheckViewModelと同じjudge()経路で所持状況を判定する。
@@ -48,10 +51,15 @@ final class ShareExtensionViewModel: ObservableObject {
     }
 
     func handle(sharedURL: URL?) {
-        guard let sharedURL,
-              let asin = AmazonURLParser.extractASIN(from: sharedURL),
-              let isbn = ISBNConverter.isbn13(fromASIN: asin)
-        else {
+        let extractedASIN = sharedURL.flatMap(AmazonURLParser.extractASIN(from:))
+        let convertedISBN = extractedASIN.flatMap(ISBNConverter.isbn13(fromASIN:))
+        logger.notice("""
+        handle(sharedURL:) url=\(sharedURL?.absoluteString ?? "nil", privacy: .public) \
+        asin=\(extractedASIN ?? "nil", privacy: .public) \
+        isbn=\(convertedISBN ?? "nil", privacy: .public)
+        """)
+
+        guard let sharedURL, let asin = extractedASIN, let isbn = convertedISBN else {
             state = .unrecognized
             return
         }

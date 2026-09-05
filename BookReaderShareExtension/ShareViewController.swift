@@ -15,6 +15,7 @@ final class ShareViewController: UIViewController {
         let bookRepository = CoreDataBookRepository(context: PersistenceController.shared.container.viewContext)
 
         loadSharedURL { [weak self] url in
+            logger.notice("取得したURL: \(url?.absoluteString ?? "nil", privacy: .public)")
             DispatchQueue.main.async {
                 self?.presentRootView(sharedURL: url, bookRepository: bookRepository)
             }
@@ -65,6 +66,7 @@ final class ShareViewController: UIViewController {
 
         guard !attachments.isEmpty else {
             logger.error("共有されたアイテムにattachmentsが存在しない")
+            logger.notice("inputItems件数: \(self.extensionContext?.inputItems.count ?? -1, privacy: .public)")
             completion(nil)
             return
         }
@@ -75,7 +77,7 @@ final class ShareViewController: UIViewController {
     private func tryLoadURL(from attachments: [NSItemProvider], index: Int, completion: @escaping (URL?) -> Void) {
         guard index < attachments.count else {
             let allTypes = attachments.map(\.registeredTypeIdentifiers)
-            logger.error("URLを取り出せる型が見つからなかった。提供された型一覧: \(String(describing: allTypes))")
+            logger.error("URLを取り出せる型が見つからなかった。提供された型一覧: \(String(describing: allTypes), privacy: .public)")
             completion(nil)
             return
         }
