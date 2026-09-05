@@ -246,6 +246,23 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(queryItems?.first { $0.name == "ndc" }?.value, "726.1")
     }
 
+    /// 回帰テスト: 実際に確認したONE PIECEのケース（cnt=200では91巻以降が枠に収まらず、
+    /// 実際は115巻まで連番で存在するのに90巻で打ち切られてしまっていた）。
+    func test_fetchSeriesVolumeCount_requestsLargerPageSizeThanTheOldDefault() async throws {
+        var capturedURL: URL?
+        StubURLProtocol.responseProvider = { url in
+            capturedURL = url
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Self.notFoundResponseXML.data(using: .utf8)!, response)
+        }
+        let service = NDLSearchService(session: StubURLProtocol.makeSession())
+        _ = try? await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+
+        let queryItems = URLComponents(url: try XCTUnwrap(capturedURL), resolvingAgainstBaseURL: false)?.queryItems
+        let cnt = queryItems?.first { $0.name == "cnt" }?.value.flatMap(Int.init)
+        XCTAssertEqual(cnt, 500, "旧cnt=200では長期連載作品の巻数が枠に収まりきらないことを実データで確認した")
+    }
+
     func test_fetchSeriesVolumeCount_noGaps_returnsMaxVolume() async throws {
         // 実際に確認した鬼滅の刃（1〜23巻、欠番なし）のケースを模したデータ
         let items = (1...23).map { FixtureItem(title: "鬼滅の刃", volume: String($0)) }
@@ -253,6 +270,16 @@ final class NDLSearchServiceTests: XCTestCase {
 
         let count = try await service.fetchSeriesVolumeCount(seriesName: "鬼滅の刃")
         XCTAssertEqual(count, 23)
+    }
+
+    /// 回帰テスト: 実際に確認したONE PIECE（115巻まで欠番なし）のような長期連載作品でも、
+    /// 応答件数が十分であれば正しく最新巻まで既刊数を判定できること。
+    func test_fetchSeriesVolumeCount_longRunningSeriesWithManyVolumes_returnsMaxVolume() async throws {
+        let items = (1...115).map { FixtureItem(title: "ONE PIECE", volume: "巻\($0)") }
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let count = try await service.fetchSeriesVolumeCount(seriesName: "ONE PIECE")
+        XCTAssertEqual(count, 115)
     }
 
     func test_fetchSeriesVolumeCount_gapPartway_returnsOnlyTheLeadingConsecutiveRun() async throws {
