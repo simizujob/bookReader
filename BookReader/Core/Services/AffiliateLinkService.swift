@@ -36,15 +36,3 @@ struct AffiliateLinkService: AffiliateLinking {
         return components.url!
     }
 }
-
-extension URL {
-    /// Universal LinkによってAmazonアプリに横取りされるのを避け、確実にSafariで開かせるための変換。
-    /// Amazonアプリへ直接遷移すると、Cookieベースのアフィリエイト計測（tag）が効かなくなることを
-    /// 実機で確認したための対策。共有シート拡張機能のextensionContext.open(_:)経由でのみ使用する
-    /// （アプリ本体側はSFSafariViewControllerで開くためこの変換は不要、そちらはUniversal Link
-    /// 解決を経由しないので最初からAmazonアプリに横取りされない）。
-    var forcedToOpenInSafari: URL {
-        guard absoluteString.hasPrefix("https://") else { return self }
-        return URL(string: "x-safari-\(absoluteString)") ?? self
-    }
-}

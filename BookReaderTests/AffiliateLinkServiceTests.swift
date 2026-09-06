@@ -27,17 +27,4 @@ final class AffiliateLinkServiceTests: XCTestCase {
         let items = Dictionary(uniqueKeysWithValues: components.queryItems!.map { ($0.name, $0.value) })
         XCTAssertEqual(items["tag"], "taros0480x84e-22")
     }
-
-    func test_forcedToOpenInSafari_prependsXSafariScheme() {
-        let url = URL(string: "https://www.amazon.co.jp/dp/4088851306?tag=taros0480x84e-22")!
-        XCTAssertEqual(
-            url.forcedToOpenInSafari.absoluteString,
-            "x-safari-https://www.amazon.co.jp/dp/4088851306?tag=taros0480x84e-22"
-        )
-    }
-
-    func test_forcedToOpenInSafari_nonHTTPSURL_returnsUnchanged() {
-        let url = URL(string: "mailto:test@example.com")!
-        XCTAssertEqual(url.forcedToOpenInSafari, url)
-    }
 }

@@ -42,19 +42,21 @@ final class ShareViewController: UIViewController {
         hosting.didMove(toParent: self)
     }
 
-    /// アフィリエイトタグ付きの商品ページURLが渡された場合はSafariへハンドオフしてから
-    /// 拡張を終了する。渡されなければそのまま閉じる。
-    /// 実機で確認: 素のURLをそのまま渡すとUniversal LinkによりAmazonアプリへ直接遷移してしまい、
-    /// Cookieベースのアフィリエイト計測（tag）が効かない。forcedToOpenInSafariでSafariでの
-    /// オープンを強制する。
+    /// アフィリエイトタグ付きの商品ページURLが渡された場合はAmazon（アプリ or Safari）へ
+    /// ハンドオフしてから拡張を終了する。渡されなければそのまま閉じる。
+    /// 実機で確認: x-safari-https://でSafariでのオープンを強制しようとしたが、
+    /// extensionContext.open(_:)はこの非標準スキームを無効なURLとして拒否し(success=false)、
+    /// 何も開かれなくなる回帰を引き起こした。共有拡張機能（extensionContext.open）からは
+    /// Universal Linkによるアプリへの横取りを回避する手段が無いというiOS側の制約のため、
+    /// 素のURLに戻す。Safari限定でのアフィリエイト計測を確実にしたい場合は、本体アプリの
+    /// 「AmazonのURLを貼り付け」機能（SFSafariViewControllerで開く）を使う想定。
     private func finish(returningToAmazon url: URL?) {
         guard let url else {
             extensionContext?.completeRequest(returningItems: nil)
             return
         }
-        let safariURL = url.forcedToOpenInSafari
-        logger.notice("Amazonへ戻るURLを開く: \(safariURL.absoluteString, privacy: .public)")
-        extensionContext?.open(safariURL) { [weak self] success in
+        logger.notice("Amazonへ戻るURLを開く: \(url.absoluteString, privacy: .public)")
+        extensionContext?.open(url) { [weak self] success in
             logger.notice("Amazonへ戻るopen()の結果: \(success, privacy: .public)")
             self?.extensionContext?.completeRequest(returningItems: nil)
         }
