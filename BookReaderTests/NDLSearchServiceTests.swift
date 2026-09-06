@@ -468,7 +468,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+        let candidates = try await service.searchCandidates(title: "鬼滅の刃")
 
         XCTAssertEqual(candidates.count, 2)
         XCTAssertEqual(candidates.first?.isbn, "9784088801955")
@@ -488,7 +488,7 @@ final class NDLSearchServiceTests: XCTestCase {
             return (Self.notFoundResponseXML.data(using: .utf8)!, response)
         }
         let service = NDLSearchService(session: StubURLProtocol.makeSession())
-        _ = await service.searchCandidates(title: "ワンピース")
+        _ = try await service.searchCandidates(title: "ワンピース")
 
         let urls = capturedURLs.values
         XCTAssertEqual(urls.count, 2, "漫画区分優先＋一般検索の2回問い合わせること")
@@ -525,7 +525,7 @@ final class NDLSearchServiceTests: XCTestCase {
         }
         let service = NDLSearchService(session: StubURLProtocol.makeSession())
 
-        let candidates = await service.searchCandidates(title: "ワンピース")
+        let candidates = try await service.searchCandidates(title: "ワンピース")
 
         XCTAssertEqual(
             candidates.map(\.isbn), ["9784088725093", "9784000000099"],
@@ -537,7 +537,7 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = [FixtureItem(title: "ONE PIECE", volume: "巻5", isbn: "9784088725093")]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "ONE PIECE")
+        let candidates = try await service.searchCandidates(title: "ONE PIECE")
 
         XCTAssertEqual(candidates.first?.volumeLabel, "5巻")
     }
@@ -546,7 +546,7 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = [FixtureItem(title: "三体", volume: nil, isbn: "9784041061059")]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "三体")
+        let candidates = try await service.searchCandidates(title: "三体")
 
         XCTAssertNil(candidates.first?.volumeLabel)
     }
@@ -559,7 +559,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "三体")
+        let candidates = try await service.searchCandidates(title: "三体")
 
         XCTAssertEqual(candidates.count, 1)
     }
@@ -568,7 +568,7 @@ final class NDLSearchServiceTests: XCTestCase {
         let items = [FixtureItem(title: "ISBN不明の本", volume: nil, isbn: nil)]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "ISBN不明の本")
+        let candidates = try await service.searchCandidates(title: "ISBN不明の本")
 
         XCTAssertTrue(candidates.isEmpty)
     }
@@ -579,7 +579,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "アニメ円盤")
+        let candidates = try await service.searchCandidates(title: "アニメ円盤")
 
         XCTAssertTrue(candidates.isEmpty)
     }
@@ -599,7 +599,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "ワンピース")
+        let candidates = try await service.searchCandidates(title: "ワンピース")
 
         XCTAssertEqual(candidates.first?.isbn, "9784088725093", "読み仮名が完全一致する本来の作品を最上位にすること")
     }
@@ -613,7 +613,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+        let candidates = try await service.searchCandidates(title: "鬼滅の刃")
 
         XCTAssertEqual(candidates.first?.isbn, "9784088801955")
     }
@@ -626,7 +626,7 @@ final class NDLSearchServiceTests: XCTestCase {
         ]
         let service = makeService(xml: makeSeriesSearchXML(items: items))
 
-        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+        let candidates = try await service.searchCandidates(title: "鬼滅の刃")
 
         XCTAssertEqual(candidates.map(\.isbn), ["9784088801955"])
     }

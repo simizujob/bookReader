@@ -8,6 +8,8 @@ final class TitleSearchViewModel: ObservableObject {
     @Published private(set) var candidates: [TitleSearchCandidate] = []
     @Published private(set) var isSearching = false
     @Published private(set) var hasSearched = false
+    /// 通信エラーで検索できなかった場合true。「本当に0件」と区別してユーザーに伝えるため。
+    @Published private(set) var searchFailed = false
 
     private let titleSearching: TitleSearching
 
@@ -20,12 +22,31 @@ final class TitleSearchViewModel: ObservableObject {
 
     func search(_ title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            reset()
+            return
+        }
         searchTask = Task {
             isSearching = true
-            candidates = await titleSearching.searchCandidates(title: trimmed)
+            searchFailed = false
+            do {
+                candidates = try await titleSearching.searchCandidates(title: trimmed)
+            } catch {
+                candidates = []
+                searchFailed = true
+            }
             hasSearched = true
             isSearching = false
         }
+    }
+
+    /// 検索欄が空になった場合に、検索前の状態（案内文表示）へ戻す。
+    func reset() {
+        searchTask?.cancel()
+        searchTask = nil
+        candidates = []
+        hasSearched = false
+        searchFailed = false
+        isSearching = false
     }
 }

@@ -29,7 +29,7 @@ struct TitleSearchCandidate: Equatable, Identifiable {
 }
 
 protocol TitleSearching {
-    func searchCandidates(title: String) async -> [TitleSearchCandidate]
+    func searchCandidates(title: String) async throws -> [TitleSearchCandidate]
 }
 
 /// 国立国会図書館サーチ（https://ndlsearch.ndl.go.jp/）連携。
@@ -210,21 +210,40 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
     /// 本来の作品が1件も出てこないことを実データで確認した。一方でNDCを絞り込み条件にして
     /// 除外してしまうと、漫画以外の本（小説等）がタイトル検索で見つからなくなってしまう。
     /// そこで「漫画区分の検索結果を優先して上位に、それ以外はその後ろに」という2回検索・
-    /// マージ方式にした（除外ではなく並べ替えの優先度として扱う）。
-    func searchCandidates(title: String) async -> [TitleSearchCandidate] {
-        async let mangaScored = fetchScoredCandidates(title: title, ndc: "726.1")
-        async let generalScored = fetchScoredCandidates(title: title, ndc: nil)
+    /// マージ方式にした（除外ではなく並べ替えの優先度として扱う）。同点の場合は巻数が
+    /// 判明している候補（実際にシリーズの1冊として管理できるもの）を、画集・ガイドブック等
+    /// 巻数の無い関連本より優先する。
+    ///
+    /// 2回の問い合わせのうち一方が失敗しても、成功した方の結果は返す（ベストエフォート）。
+    /// 両方失敗した場合のみエラーを投げ、呼び出し側が「本当に0件」と「通信エラー」を
+    /// 区別できるようにする。
+    func searchCandidates(title: String) async throws -> [TitleSearchCandidate] {
+        async let mangaScored = try? fetchScoredCandidates(title: title, ndc: "726.1")
+        async let generalScored = try? fetchScoredCandidates(title: title, ndc: nil)
         let manga = await mangaScored
         let general = await generalScored
 
-        let mangaCandidates = manga.sorted { $0.score > $1.score }.map(\.candidate)
+        guard manga != nil || general != nil else {
+            throw NDLSearchError.network("タイトル検索に失敗しました")
+        }
+
+        let mangaCandidates = (manga ?? []).sorted(by: Self.isHigherPriority).map(\.candidate)
         let mangaISBNs = Set(mangaCandidates.map(\.isbn))
-        let otherCandidates = general
+        let otherCandidates = (general ?? [])
             .filter { !mangaISBNs.contains($0.candidate.isbn) }
-            .sorted { $0.score > $1.score }
+            .sorted(by: Self.isHigherPriority)
             .map(\.candidate)
 
         return mangaCandidates + otherCandidates
+    }
+
+    /// スコア降順。同点の場合は巻数が判明している候補を優先する。
+    private static func isHigherPriority(
+        _ lhs: (candidate: TitleSearchCandidate, score: Double),
+        _ rhs: (candidate: TitleSearchCandidate, score: Double)
+    ) -> Bool {
+        if lhs.score != rhs.score { return lhs.score > rhs.score }
+        return lhs.candidate.volumeLabel != nil && rhs.candidate.volumeLabel == nil
     }
 
     /// クエリと候補タイトルの関連度でスコア付けした候補一覧を1回分取得する。ndcを指定すると
@@ -235,7 +254,7 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
     private func fetchScoredCandidates(
         title: String,
         ndc: String?
-    ) async -> [(candidate: TitleSearchCandidate, score: Double)] {
+    ) async throws -> [(candidate: TitleSearchCandidate, score: Double)] {
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return []
         }
@@ -244,7 +263,8 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
             queryItems.append(URLQueryItem(name: "ndc", value: ndc))
         }
         components.queryItems = queryItems
-        guard let url = components.url, let data = try? await fetchData(from: url) else { return [] }
+        guard let url = components.url else { return [] }
+        let data = try await fetchData(from: url)
 
         var seenISBNs: Set<String> = []
         var scored: [(candidate: TitleSearchCandidate, score: Double)] = []
