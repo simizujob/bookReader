@@ -21,13 +21,10 @@ struct TitleSearchView: View {
                             onSelect(candidate.isbn)
                             dismiss()
                         } label: {
-                            HStack(spacing: 12) {
-                                CoverThumbnailView(url: candidate.coverImageURL)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(candidate.title).foregroundStyle(.primary)
-                                    if let creator = candidate.creator {
-                                        Text(creator).font(.caption).foregroundStyle(.secondary)
-                                    }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(candidate.title).foregroundStyle(.primary)
+                                if let creator = candidate.creator {
+                                    Text(creator).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }

@@ -16,7 +16,7 @@ final class TitleSearchViewModelTests: XCTestCase {
     func test_search_populatesCandidates() async throws {
         let titleSearching = MockTitleSearching()
         titleSearching.candidatesByTitle["鬼滅の刃"] = [
-            TitleSearchCandidate(isbn: "9784088801955", title: "鬼滅の刃 1", creator: "吾峠, 呼世晴", coverImageURL: nil)
+            TitleSearchCandidate(isbn: "9784088801955", title: "鬼滅の刃 1", creator: "吾峠, 呼世晴")
         ]
         let viewModel = TitleSearchViewModel(titleSearching: titleSearching)
 
@@ -31,7 +31,7 @@ final class TitleSearchViewModelTests: XCTestCase {
     func test_search_trimsWhitespace() async throws {
         let titleSearching = MockTitleSearching()
         titleSearching.candidatesByTitle["三体"] = [
-            TitleSearchCandidate(isbn: "9784041061059", title: "三体", creator: nil, coverImageURL: nil)
+            TitleSearchCandidate(isbn: "9784041061059", title: "三体", creator: nil)
         ]
         let viewModel = TitleSearchViewModel(titleSearching: titleSearching)
 

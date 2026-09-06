@@ -13,6 +13,23 @@ protocol PaperEditionSearching {
     func searchPaperEditionISBN(titleHint: String) async -> String?
 }
 
+/// タイトルの手掛かりを1件のISBNへ自動確定せず、候補を複数返してユーザーに選ばせる窓口。
+/// 買う前チェック画面のタイトル検索（Amazonを開かずに本のタイトルだけで判定したい場合）で使用する。
+///
+/// Google Books APIへの切り替えを試したが、日本の漫画データの大半がISBNを持たず
+/// （Google Playブックス独自の商品コードのみ）判定に使えないことが実データで判明したため、
+/// NDL Search（ISBNデータの網羅性・正確性が本質的に高い）に戻した。
+struct TitleSearchCandidate: Equatable, Identifiable {
+    let isbn: String
+    let title: String
+    let creator: String?
+    var id: String { isbn }
+}
+
+protocol TitleSearching {
+    func searchCandidates(title: String) async -> [TitleSearchCandidate]
+}
+
 /// 国立国会図書館サーチ（https://ndlsearch.ndl.go.jp/）連携。
 /// 国内で出版される書籍は国立国会図書館法により納本が義務付けられているため、
 /// openBD・Open Libraryよりもさらに網羅性が高い（無料・APIキー不要）。
@@ -182,23 +199,24 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
     private static let minimumTitleSearchRelevance = 0.3
 
     /// タイトルで検索し、ISBNが分かる候補を関連度の高い順に返す（重複ISBNは除外）。
-    /// Google Books API（メインのタイトル検索先）が失敗・割り当て超過した場合のフォールバックとして
-    /// 使用する（買う前チェック画面のタイトル検索がGoogle依存で完全に止まらないようにするため）。
+    /// Amazonを開かず、思い出したタイトルだけで買う前チェックしたい場合に使用する。
     /// 表紙画像は提供されないため、著者名を添えてユーザーが候補を見分けられるようにする。
     ///
-    /// 実機で確認: NDLのタイトル検索は素朴なキーワード一致に近く、「ワンピース」で検索すると
-    /// 本来欲しいONE PIECE（漫画）よりも、たまたま「ワンピース」という語を含む無関係な商品
-    /// （婦人服等）が先に出てきて埋もれてしまう不具合があった。単純な文字列一致だけでなく、
-    /// 完全一致／前方一致を優先したスコアリングで並べ替える。また、"ONE PIECE"のように
-    /// タイトルがローマ字表記の作品をカタカナ読み（「ワンピース」）で検索した場合にも
-    /// 対応できるよう、dcndl:titleTranscription（読み仮名）も照合対象に含める。
+    /// 実機で確認: NDLのタイトル検索は関連度順ではなく、別の基準（タイトル文字列順と思われる）
+    /// で返ってくる。「ワンピース」で検索した場合、本来欲しいONE PIECE（"One piece"表記）は
+    /// 500件中94件目付近まで下がらないと現れず、以前のcnt=30では取得ウィンドウに一切入らず
+    /// 「該当する本来の作品が候補に出てこない」不具合になっていた（実データで検証済み）。
+    /// fetchSeriesVolumeCountと同様cnt=500まで引き上げ、取得した範囲内で完全一致／前方一致を
+    /// 優先したスコアリングにより並べ替える。"ONE PIECE"のようにタイトルがローマ字表記の作品を
+    /// カタカナ読み（「ワンピース」）で検索した場合にも対応できるよう、dcndl:titleTranscription
+    /// （読み仮名）も照合対象に含める。
     func searchCandidates(title: String) async -> [TitleSearchCandidate] {
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return []
         }
         components.queryItems = [
             URLQueryItem(name: "title", value: title),
-            URLQueryItem(name: "cnt", value: "30")
+            URLQueryItem(name: "cnt", value: "500")
         ]
         guard let url = components.url, let data = try? await fetchData(from: url) else { return [] }
 
@@ -209,7 +227,7 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
             seenISBNs.insert(isbn)
             let score = Self.relevanceScore(query: title, title: itemTitle, titleTranscription: item.titleTranscription)
             guard score >= Self.minimumTitleSearchRelevance else { continue }
-            scored.append((TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator, coverImageURL: nil), score))
+            scored.append((TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator), score))
         }
         return scored.sorted { $0.score > $1.score }.map(\.candidate)
     }

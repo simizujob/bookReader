@@ -440,7 +440,7 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(result?.total, 10, "「巻」付き表記が存在しないタイトルでは裸数字+副題表記を除外しないこと")
     }
 
-    // MARK: - searchCandidates（Google Books失敗時のフォールバックとして使用するタイトル検索）
+    // MARK: - searchCandidates（タイトルだけで検索し、候補をユーザーに選ばせる）
 
     func test_searchCandidates_returnsCandidatesWithCreator() async throws {
         let items = [
@@ -455,7 +455,25 @@ final class NDLSearchServiceTests: XCTestCase {
         XCTAssertEqual(candidates.first?.isbn, "9784088801955")
         XCTAssertEqual(candidates.first?.title, "鬼滅の刃 1")
         XCTAssertEqual(candidates.first?.creator, "吾峠, 呼世晴")
-        XCTAssertNil(candidates.first?.coverImageURL, "NDLは表紙画像を提供しない")
+    }
+
+    /// 回帰テスト: 実機で確認したケース。NDLのタイトル検索は関連度順ではなく返ってくるため、
+    /// cnt=30では本来欲しい作品（"ワンピース"で検索した際のONE PIECE本編）が取得ウィンドウに
+    /// 入らないことがあった（実データで500件中94件目付近だったことを確認済み）。
+    /// fetchSeriesVolumeCountと同じcnt=500を使っていること。
+    func test_searchCandidates_requestsLargePageSizeToAvoidMissingRelevantTitles() async throws {
+        var capturedURL: URL?
+        StubURLProtocol.responseProvider = { url in
+            capturedURL = url
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (Self.notFoundResponseXML.data(using: .utf8)!, response)
+        }
+        let service = NDLSearchService(session: StubURLProtocol.makeSession())
+        _ = await service.searchCandidates(title: "ワンピース")
+
+        let queryItems = URLComponents(url: try XCTUnwrap(capturedURL), resolvingAgainstBaseURL: false)?.queryItems
+        let cnt = queryItems?.first { $0.name == "cnt" }?.value.flatMap(Int.init)
+        XCTAssertEqual(cnt, 500, "cnt=30では関連度順でないNDLの応答から本来の作品が漏れることを実データで確認した")
     }
 
     func test_searchCandidates_deduplicatesByISBN() async throws {
