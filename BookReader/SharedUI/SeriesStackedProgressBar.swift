@@ -16,7 +16,7 @@ struct SeriesStackedProgressBar: View {
                 ForEach(Self.displayOrder, id: \.self) { status in
                     let count = countsByStatus[status] ?? 0
                     if count > 0 {
-                        StatusPillMenu.color(for: status)
+                        Self.barColor(for: status)
                             .frame(width: geometry.size.width * fraction(for: count))
                     }
                 }
@@ -28,6 +28,14 @@ struct SeriesStackedProgressBar: View {
         .clipShape(Capsule())
         .accessibilityElement()
         .accessibilityLabel(accessibilityDescription)
+    }
+
+    /// バー上の色。読了/読書中/未読は進捗（達成度）を表すためステータスピルと同じ鮮やかな色を
+    /// 使うが、未購入は「まだ何もしていない」状態であり同じ鮮やかさだと進捗のように見えて
+    /// 紛らわしいため、バーの上だけグレーで表現する（ピル自体の色はStatusPillMenu.color(for:)の
+    /// ままタップ可能な要素として区別できるようにする）。
+    private static func barColor(for status: UnifiedStatus) -> Color {
+        status == .wishlist ? Color.secondary.opacity(0.35) : StatusPillMenu.color(for: status)
     }
 
     private var countsByStatus: [UnifiedStatus: Int] {

@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 
 struct ScanRegisterView: View {
     @StateObject private var viewModel: ScanRegisterViewModel
     @StateObject private var camera = CameraCaptureController()
     @Environment(\.dismiss) private var dismiss
     private let onFinished: () -> Void
+    /// 買う前チェックと同じ、スキャン確定時のフィードバック（枠を光らせる＋触感）。
+    @State private var scanFlashOpacity: Double = 0
 
     init(bookRepository: BookRepository, onFinished: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: ScanRegisterViewModel(bookRepository: bookRepository))
@@ -38,6 +41,22 @@ struct ScanRegisterView: View {
                 camera.stop()
                 onFinished()
             }
+            .onChange(of: viewModel.registerState) { _, newValue in
+                guard case .scanning = newValue else {
+                    flashScanCompletion()
+                    return
+                }
+            }
+        }
+    }
+
+    private func flashScanCompletion() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.easeOut(duration: 0.15)) {
+            scanFlashOpacity = 1
+        }
+        withAnimation(.easeIn(duration: 0.5).delay(0.15)) {
+            scanFlashOpacity = 0
         }
     }
 
@@ -53,6 +72,10 @@ struct ScanRegisterView: View {
                 Text("カメラを利用できません")
                     .foregroundStyle(.white)
             }
+            // スキャン完了時に枠を光らせ、カメラに集中していても気づけるようにする
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white, lineWidth: 8)
+                .opacity(scanFlashOpacity)
         }
         .frame(height: 280)
     }
