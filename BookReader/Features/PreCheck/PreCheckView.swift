@@ -279,7 +279,7 @@ struct PreCheckView: View {
     private var scannedBookFooter: some View {
         if let info = scannedBookInfo {
             HStack(spacing: 12) {
-                coverThumbnail(url: info.coverImageURL)
+                CoverThumbnailView(url: info.coverImageURL)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("スキャンした本").font(.caption).foregroundStyle(.secondary)
                     Text(info.title).font(.subheadline).fontWeight(.semibold).lineLimit(2)
@@ -315,27 +315,4 @@ struct PreCheckView: View {
         }
     }
 
-    @ViewBuilder
-    private func coverThumbnail(url: String?) -> some View {
-        let placeholder = RoundedRectangle(cornerRadius: 4)
-            .fill(Color.secondary.opacity(0.2))
-            .overlay {
-                Image(systemName: "book.closed").foregroundStyle(.secondary)
-            }
-
-        if let url, let imageURL = URL(string: url) {
-            AsyncImage(url: imageURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    placeholder
-                }
-            }
-            .frame(width: 40, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else {
-            placeholder.frame(width: 40, height: 56)
-        }
-    }
 }
