@@ -167,12 +167,14 @@ struct PreCheckView: View {
                 }
             }
         case .wishlisted:
+            // 持っているか否かの判別が目的の画面のため、「持っていません」を主表示とし、
+            // 気になるリストへの登録済み状態は補助情報として添える（ユーザーからのフィードバック）。
             VStack(alignment: .leading, spacing: 8) {
                 resultCard(
-                    title: "気になるリストに登録済みです",
-                    subtitle: "本棚では未購入として表示されています",
-                    tint: .blue,
-                    systemImage: "bookmark.fill"
+                    title: "持っていません",
+                    subtitle: "気になるリストに登録済みです（本棚では未購入として表示）",
+                    tint: .secondary,
+                    systemImage: "xmark.circle"
                 )
                 HStack(spacing: 12) {
                     continueScanningButton

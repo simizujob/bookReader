@@ -53,13 +53,20 @@ struct ShareExtensionRootView: View {
     private func judgedResult(_ result: JudgeResult) -> some View {
         switch result {
         case .owned:
-            resultCard(title: "持っています", tint: .green, systemImage: "checkmark.circle.fill")
+            resultCard(title: "持っています", subtitle: nil, tint: .green, systemImage: "checkmark.circle.fill")
             returnToAmazonButton
         case .wishlisted:
-            resultCard(title: "気になるリストに登録済みです", tint: .blue, systemImage: "bookmark.fill")
+            // 持っているか否かの判別が目的の画面のため、「持っていません」を主表示とし、
+            // 気になるリストへの登録済み状態は補助情報として添える。
+            resultCard(
+                title: "持っていません",
+                subtitle: "気になるリストに登録済みです（本棚では未購入として表示）",
+                tint: .secondary,
+                systemImage: "xmark.circle"
+            )
             returnToAmazonButton
         case .notOwned:
-            resultCard(title: "持っていません", tint: .secondary, systemImage: "xmark.circle")
+            resultCard(title: "持っていません", subtitle: nil, tint: .secondary, systemImage: "xmark.circle")
             HStack(spacing: 12) {
                 if viewModel.isLoadingMetadata {
                     ProgressView()
@@ -83,10 +90,15 @@ struct ShareExtensionRootView: View {
         .buttonStyle(.bordered)
     }
 
-    private func resultCard(title: String, tint: Color, systemImage: String) -> some View {
+    private func resultCard(title: String, subtitle: String?, tint: Color, systemImage: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: systemImage).foregroundStyle(tint)
-            Text(title).font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                if let subtitle {
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
