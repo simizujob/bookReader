@@ -18,8 +18,14 @@ protocol TitleSearching {
 /// NDL Searchは図書館カタログ向けの素朴なキーワード一致で、たまたま検索語を含むだけの
 /// 無関係な商品が本来欲しい本より上位に来てしまう問題があった（実機で確認）。Google Booksは
 /// 実際の検索エンジンであり関連度が高く、また表紙画像も取得できる（NDLには無い）ため、
-/// 候補を見分けやすくなる。APIキーなしでも軽い利用であれば動作する。
+/// 候補を見分けやすくなる。
+///
+/// 実機で確認: APIキー無しのリクエストは1日あたりの割り当てが0件に設定されており、
+/// 常に空の結果になっていた（エラーレスポンスだがitemsキーが無いだけなので、デコード自体は
+/// 成功し「該当0件」と区別が付かない）。Google Cloud Consoleで発行した無料枠のAPIキーを
+/// 付与する。トラッキングIDと同様、iOSアプリのBundle IDで制限をかけた上での直書きを想定。
 struct GoogleBooksService: TitleSearching {
+    private let apiKey = "AIzaSyCoNON-PC79t0dhGID7X6Fgvd4KPFS2wi0"
     private let session: URLSession
 
     init(session: URLSession? = nil) {
@@ -39,7 +45,8 @@ struct GoogleBooksService: TitleSearching {
         components.queryItems = [
             URLQueryItem(name: "q", value: title),
             URLQueryItem(name: "country", value: "JP"),
-            URLQueryItem(name: "maxResults", value: "20")
+            URLQueryItem(name: "maxResults", value: "20"),
+            URLQueryItem(name: "key", value: apiKey)
         ]
         guard let url = components.url else { return [] }
         guard let (data, _) = try? await session.data(from: url) else { return [] }

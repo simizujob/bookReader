@@ -2,6 +2,7 @@ import Foundation
 
 /// タイトルだけで買う前チェックしたい場合の検索（Amazonを開いていなくても使える入り口）。
 /// Google Books APIで検索する（NDL Searchより関連度が高く、表紙画像も取得できるため）。
+/// 失敗・割り当て超過時はNDL Searchへ自動的にフォールバックする（CompositeTitleSearchService参照）。
 @MainActor
 final class TitleSearchViewModel: ObservableObject {
     @Published private(set) var candidates: [TitleSearchCandidate] = []
@@ -13,7 +14,7 @@ final class TitleSearchViewModel: ObservableObject {
     /// テストから検索の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
     private(set) var searchTask: Task<Void, Never>?
 
-    init(titleSearching: TitleSearching = GoogleBooksService()) {
+    init(titleSearching: TitleSearching = CompositeTitleSearchService()) {
         self.titleSearching = titleSearching
     }
 
