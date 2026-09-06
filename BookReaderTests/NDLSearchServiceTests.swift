@@ -1,6 +1,25 @@
 import XCTest
 @testable import BookReader
 
+/// searchCandidatesが並行して複数リクエストを送るようになったため、テストの
+/// responseProviderクロージャが複数スレッドから呼ばれても安全に記録できるようにする。
+private final class LockedArray<Element>: @unchecked Sendable {
+    private var storage: [Element] = []
+    private let lock = NSLock()
+
+    func append(_ element: Element) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(element)
+    }
+
+    var values: [Element] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
 final class NDLSearchServiceTests: XCTestCase {
     /// 実際にNDL Searchから取得した応答（2026-09-05時点、ISBN 9784081135684 = HUNTER×HUNTER 5巻）を
     /// 固定データとして使用する。このISBNはOpen Library・openBDどちらにも存在しない（curlで確認済み）が、
@@ -462,18 +481,74 @@ final class NDLSearchServiceTests: XCTestCase {
     /// 入らないことがあった（実データで500件中94件目付近だったことを確認済み）。
     /// fetchSeriesVolumeCountと同じcnt=500を使っていること。
     func test_searchCandidates_requestsLargePageSizeToAvoidMissingRelevantTitles() async throws {
-        var capturedURL: URL?
+        let capturedURLs = LockedArray<URL>()
         StubURLProtocol.responseProvider = { url in
-            capturedURL = url
+            capturedURLs.append(url)
             let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (Self.notFoundResponseXML.data(using: .utf8)!, response)
         }
         let service = NDLSearchService(session: StubURLProtocol.makeSession())
         _ = await service.searchCandidates(title: "ワンピース")
 
-        let queryItems = URLComponents(url: try XCTUnwrap(capturedURL), resolvingAgainstBaseURL: false)?.queryItems
-        let cnt = queryItems?.first { $0.name == "cnt" }?.value.flatMap(Int.init)
-        XCTAssertEqual(cnt, 500, "cnt=30では関連度順でないNDLの応答から本来の作品が漏れることを実データで確認した")
+        let urls = capturedURLs.values
+        XCTAssertEqual(urls.count, 2, "漫画区分優先＋一般検索の2回問い合わせること")
+        for url in urls {
+            let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            let cnt = queryItems?.first { $0.name == "cnt" }?.value.flatMap(Int.init)
+            XCTAssertEqual(cnt, 500, "cnt=30では関連度順でないNDLの応答から本来の作品が漏れることを実データで確認した")
+        }
+        let ndcValues = urls.compactMap { url in
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "ndc" }?.value
+        }
+        XCTAssertEqual(ndcValues, ["726.1"], "漫画区分（726.1）で絞り込む問い合わせが1回含まれること")
+    }
+
+    /// 回帰テスト: ユーザーからのフィードバック。「ワンピース」のように一般的な単語と被る
+    /// 作品名では、漫画区分（NDC 726.1）で絞り込まないとcnt=500まで見ても本来の作品が
+    /// 1件も出てこないことを実データで確認した。かといって除外条件にすると漫画以外の本が
+    /// 検索できなくなるため、「漫画区分の結果を優先して上位、それ以外は下に」という
+    /// 並べ替え方針にした。
+    func test_searchCandidates_prioritizesMangaClassificationOverGeneralResults() async throws {
+        let mangaItems = [
+            FixtureItem(title: "ONE PIECE", volume: "1", isbn: "9784088725093", titleTranscription: "ワン ピース")
+        ]
+        let generalItems = [
+            // 一般検索でも同じ本がヒットする
+            FixtureItem(title: "ONE PIECE", volume: "1", isbn: "9784088725093", titleTranscription: "ワン ピース"),
+            FixtureItem(title: "あーたんのワンピース", volume: nil, isbn: "9784000000099") // 漫画以外の無関係な本
+        ]
+        StubURLProtocol.responseProvider = { url in
+            let hasNDC = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "ndc" } ?? false
+            let xml = self.makeSeriesSearchXML(items: hasNDC ? mangaItems : generalItems)
+            let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (xml.data(using: .utf8)!, response)
+        }
+        let service = NDLSearchService(session: StubURLProtocol.makeSession())
+
+        let candidates = await service.searchCandidates(title: "ワンピース")
+
+        XCTAssertEqual(
+            candidates.map(\.isbn), ["9784088725093", "9784000000099"],
+            "漫画区分の候補を先頭に、一般検索でのみヒットする候補（かつ重複しないもの）をその後ろに並べること"
+        )
+    }
+
+    func test_searchCandidates_includesVolumeLabelForSeriesEntries() async throws {
+        let items = [FixtureItem(title: "ONE PIECE", volume: "巻5", isbn: "9784088725093")]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "ONE PIECE")
+
+        XCTAssertEqual(candidates.first?.volumeLabel, "5巻")
+    }
+
+    func test_searchCandidates_noVolumeInfo_hasNilVolumeLabel() async throws {
+        let items = [FixtureItem(title: "三体", volume: nil, isbn: "9784041061059")]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "三体")
+
+        XCTAssertNil(candidates.first?.volumeLabel)
     }
 
     func test_searchCandidates_deduplicatesByISBN() async throws {

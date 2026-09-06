@@ -23,6 +23,8 @@ struct TitleSearchCandidate: Equatable, Identifiable {
     let isbn: String
     let title: String
     let creator: String?
+    /// シリーズものの場合の巻数表示（例: "5巻"）。単行本等、巻数が無い/読み取れない場合はnil。
+    let volumeLabel: String?
     var id: String { isbn }
 }
 
@@ -198,26 +200,50 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
     /// 明らかに無関係と判断して除外する関連度スコアの下限。
     private static let minimumTitleSearchRelevance = 0.3
 
-    /// タイトルで検索し、ISBNが分かる候補を関連度の高い順に返す（重複ISBNは除外）。
+    /// タイトルで検索し、ISBNが分かる候補を返す（重複ISBNは除外）。
     /// Amazonを開かず、思い出したタイトルだけで買う前チェックしたい場合に使用する。
-    /// 表紙画像は提供されないため、著者名を添えてユーザーが候補を見分けられるようにする。
+    /// 表紙画像は提供されないため、著者名・巻数を添えてユーザーが候補を見分けられるようにする。
     ///
     /// 実機で確認: NDLのタイトル検索は関連度順ではなく、別の基準（タイトル文字列順と思われる）
-    /// で返ってくる。「ワンピース」で検索した場合、本来欲しいONE PIECE（"One piece"表記）は
-    /// 500件中94件目付近まで下がらないと現れず、以前のcnt=30では取得ウィンドウに一切入らず
-    /// 「該当する本来の作品が候補に出てこない」不具合になっていた（実データで検証済み）。
-    /// fetchSeriesVolumeCountと同様cnt=500まで引き上げ、取得した範囲内で完全一致／前方一致を
-    /// 優先したスコアリングにより並べ替える。"ONE PIECE"のようにタイトルがローマ字表記の作品を
-    /// カタカナ読み（「ワンピース」）で検索した場合にも対応できるよう、dcndl:titleTranscription
-    /// （読み仮名）も照合対象に含める。
+    /// で返ってくる。「ワンピース」のように一般的な単語と被る作品名（洋服の意味でもある）では、
+    /// 漫画区分（NDC 726.1）で絞り込まないと無関係な文献に埋め尽くされ、cnt=500まで見ても
+    /// 本来の作品が1件も出てこないことを実データで確認した。一方でNDCを絞り込み条件にして
+    /// 除外してしまうと、漫画以外の本（小説等）がタイトル検索で見つからなくなってしまう。
+    /// そこで「漫画区分の検索結果を優先して上位に、それ以外はその後ろに」という2回検索・
+    /// マージ方式にした（除外ではなく並べ替えの優先度として扱う）。
     func searchCandidates(title: String) async -> [TitleSearchCandidate] {
+        async let mangaScored = fetchScoredCandidates(title: title, ndc: "726.1")
+        async let generalScored = fetchScoredCandidates(title: title, ndc: nil)
+        let manga = await mangaScored
+        let general = await generalScored
+
+        let mangaCandidates = manga.sorted { $0.score > $1.score }.map(\.candidate)
+        let mangaISBNs = Set(mangaCandidates.map(\.isbn))
+        let otherCandidates = general
+            .filter { !mangaISBNs.contains($0.candidate.isbn) }
+            .sorted { $0.score > $1.score }
+            .map(\.candidate)
+
+        return mangaCandidates + otherCandidates
+    }
+
+    /// クエリと候補タイトルの関連度でスコア付けした候補一覧を1回分取得する。ndcを指定すると
+    /// その分類区分に絞り込んだ検索になる（漫画区分726.1で優先候補を、nilで全体を取得する用途）。
+    /// 完全一致・前方一致を優先し、"ONE PIECE"のようにタイトルがローマ字表記の作品をカタカナ読み
+    /// （「ワンピース」）で検索した場合にも対応できるよう、dcndl:titleTranscription（読み仮名）も
+    /// 照合対象に含める。
+    private func fetchScoredCandidates(
+        title: String,
+        ndc: String?
+    ) async -> [(candidate: TitleSearchCandidate, score: Double)] {
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return []
         }
-        components.queryItems = [
-            URLQueryItem(name: "title", value: title),
-            URLQueryItem(name: "cnt", value: "500")
-        ]
+        var queryItems = [URLQueryItem(name: "title", value: title), URLQueryItem(name: "cnt", value: "500")]
+        if let ndc {
+            queryItems.append(URLQueryItem(name: "ndc", value: ndc))
+        }
+        components.queryItems = queryItems
         guard let url = components.url, let data = try? await fetchData(from: url) else { return [] }
 
         var seenISBNs: Set<String> = []
@@ -227,9 +253,18 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
             seenISBNs.insert(isbn)
             let score = Self.relevanceScore(query: title, title: itemTitle, titleTranscription: item.titleTranscription)
             guard score >= Self.minimumTitleSearchRelevance else { continue }
-            scored.append((TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator), score))
+            let volumeLabel = item.volume.flatMap(NDLVolumeParser.parse).map(Self.volumeLabel)
+            scored.append((TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator, volumeLabel: volumeLabel), score))
         }
-        return scored.sorted { $0.score > $1.score }.map(\.candidate)
+        return scored
+    }
+
+    private static func volumeLabel(for parsed: NDLVolumeParser.Result) -> String {
+        var label = "\(parsed.number)巻"
+        if let marker = parsed.marker {
+            label += "(\(marker))"
+        }
+        return label
     }
 
     /// クエリと候補タイトルの関連度（0〜1、1が完全一致）。タイトル・読み仮名のうち

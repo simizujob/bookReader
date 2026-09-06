@@ -22,7 +22,18 @@ struct TitleSearchView: View {
                             dismiss()
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(candidate.title).foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Text(candidate.title).foregroundStyle(.primary)
+                                    if let volumeLabel = candidate.volumeLabel {
+                                        Text(volumeLabel)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.secondary.opacity(0.15))
+                                            .clipShape(Capsule())
+                                    }
+                                }
                                 if let creator = candidate.creator {
                                     Text(creator).font(.caption).foregroundStyle(.secondary)
                                 }
