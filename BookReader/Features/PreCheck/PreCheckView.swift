@@ -130,7 +130,10 @@ struct PreCheckView: View {
         case .owned:
             VStack(alignment: .leading, spacing: 8) {
                 resultCard(title: "持っています", subtitle: nil, tint: .green, systemImage: "checkmark.circle.fill")
-                continueScanningButton
+                HStack(spacing: 12) {
+                    continueScanningButton
+                    amazonViewButtonIfAvailable
+                }
             }
         case .wishlisted:
             VStack(alignment: .leading, spacing: 8) {
@@ -140,10 +143,25 @@ struct PreCheckView: View {
                     tint: .blue,
                     systemImage: "bookmark.fill"
                 )
-                continueScanningButton
+                HStack(spacing: 12) {
+                    continueScanningButton
+                    amazonViewButtonIfAvailable
+                }
             }
         case .notOwned:
             notOwnedResult
+        }
+    }
+
+    /// AmazonのURL貼り付け経由で判定した場合のみ表示する、任意でAmazonへ戻るボタン。
+    /// 登録直後に自動で画面遷移すると連続チェックの邪魔になるため、あくまで押した場合のみ開く。
+    @ViewBuilder
+    private var amazonViewButtonIfAvailable: some View {
+        if viewModel.amazonReturnURL != nil {
+            Button("Amazonで見る") {
+                viewModel.openAmazonReturnURL()
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -190,6 +208,8 @@ struct PreCheckView: View {
                     viewModel.skipAndContinueScanning()
                 }
                 .buttonStyle(.bordered)
+
+                amazonViewButtonIfAvailable
             }
         }
     }

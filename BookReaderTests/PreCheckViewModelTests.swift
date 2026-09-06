@@ -293,49 +293,51 @@ final class PreCheckViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.scanState, .error("AmazonのURLとして認識できませんでした"))
     }
 
-    /// カメラでのスキャン経由（judge(isbn:)）の場合は、次へ進んでもAmazonへの
-    /// 自動リダイレクトは発生しないこと（戻り先のAmazonページが無いため）。
-    func test_judge_cameraPath_doesNotSetAmazonRedirectURL() {
+    /// カメラでのスキャン経由（judge(isbn:)）の場合は戻り先のAmazonページが無いため、
+    /// amazonReturnURLが設定されないこと（「Amazonで見る」ボタンが出ないことに対応）。
+    func test_judge_cameraPath_doesNotSetAmazonReturnURL() {
         let repository = MockBookRepository()
         let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.judge(isbn: "9789999999999")
-        viewModel.skipAndContinueScanning()
 
-        XCTAssertNil(viewModel.amazonRedirectURL)
+        XCTAssertNil(viewModel.amazonReturnURL)
     }
 
-    /// AmazonのURL貼り付け経由の場合は、結果を確認して次へ進むタイミングで
-    /// アフィリエイトタグ付きのURLへ自動的にリダイレクトすること。
-    func test_checkAmazonURL_notOwned_afterSkip_setsAmazonRedirectURLWithTag() throws {
+    /// AmazonのURL貼り付け経由の場合はamazonReturnURLがタグ付きで設定されるが、
+    /// 登録・スキップ等で次へ進んでも自動ではリダイレクトしないこと（連続チェックの邪魔に
+    /// ならないよう、ユーザーが明示的にopenAmazonReturnURL()を呼んだ場合のみ遷移する仕様）。
+    func test_checkAmazonURL_setsReturnURLButDoesNotAutoRedirect() throws {
         let repository = MockBookRepository()
         let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
 
         viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
-        XCTAssertNil(viewModel.amazonRedirectURL, "結果を確認する前にリダイレクトが発生しないこと")
+
+        let returnURL = try XCTUnwrap(viewModel.amazonReturnURL)
+        let components = URLComponents(url: returnURL, resolvingAgainstBaseURL: false)!
+        XCTAssertEqual(components.path, "/dp/4088851307")
+        XCTAssertNotNil(components.queryItems?.first { $0.name == "tag" }?.value)
+        XCTAssertNil(viewModel.amazonRedirectURL, "明示的に呼ぶまでSafariViewを開かないこと")
 
         viewModel.skipAndContinueScanning()
+
+        XCTAssertNil(viewModel.amazonRedirectURL, "次へ進んでも自動でリダイレクトしないこと")
+        XCTAssertNil(viewModel.amazonReturnURL, "次のスキャンへ進んだらリセットされること")
+    }
+
+    /// 「Amazonで見る」ボタンに相当する操作（openAmazonReturnURL）を呼んだ場合のみ
+    /// SafariViewが開くこと。
+    func test_openAmazonReturnURL_setsAmazonRedirectURL() throws {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
+        viewModel.openAmazonReturnURL()
 
         let redirectURL = try XCTUnwrap(viewModel.amazonRedirectURL?.url)
         let components = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)!
         XCTAssertEqual(components.path, "/dp/4088851307")
         XCTAssertNotNil(components.queryItems?.first { $0.name == "tag" }?.value)
-    }
-
-    func test_checkAmazonURL_ownedResult_afterContinueScanning_setsAmazonRedirectURL() throws {
-        let repository = MockBookRepository()
-        let book = Book(
-            id: UUID(), isbn: "9784088851303", title: "ONE PIECE 1", seriesName: "ONE PIECE",
-            seriesKey: "onepiece", volumeNumber: 1, coverImageURL: nil, status: .owned,
-            readStatus: .unread, registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
-        )
-        repository.seed(book)
-        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
-
-        viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
-        viewModel.continueScanning()
-
-        XCTAssertNotNil(viewModel.amazonRedirectURL)
     }
 
     /// 回帰テスト: Kindle版商品ページのASIN（例: "B0872SGFKK"）はISBNとして無効なため、

@@ -35,9 +35,13 @@ final class PreCheckViewModel: ObservableObject {
     @Published private(set) var isLoadingMetadata = false
     @Published private(set) var enrichedContext = EnrichedContext()
     @Published var showManualSearch = false
-    /// AmazonのURL貼り付け経由で判定した場合、判定終了後にここへタグ付きURLをセットする。
-    /// ViewはこれをSafariViewの.sheet(item:)で開き、Amazonのアプリへ横取りされずCookieベースの
-    /// アフィリエイト計測を確実にする（カメラでのスキャン経由の場合は戻り先が無いためnilのまま）。
+    /// AmazonのURL貼り付け経由で判定した場合の戻り先（タグ付き）。カメラでのスキャン経由では
+    /// 戻り先が無いためnilのまま。ユーザーが明示的にopenAmazonReturnURL()を呼んだ場合のみ
+    /// amazonRedirectURLへ渡り、SafariViewが開く。登録直後に自動で画面遷移すると、連続して
+    /// 何冊もチェックしたいユーザーの邪魔になるため、自動遷移はしない仕様にしている。
+    @Published private(set) var amazonReturnURL: URL?
+    /// ViewはこれをSafariViewの.sheet(item:)で開く。Amazonのアプリへ横取りされずCookieベースの
+    /// アフィリエイト計測を確実にするため、SFSafariViewController（Safari自体）で開く。
     @Published var amazonRedirectURL: IdentifiableURL?
 
     private var consecutiveDetectionFailures = 0
@@ -90,7 +94,7 @@ final class PreCheckViewModel: ObservableObject {
         }
 
         if let isbn = ISBNConverter.isbn13(fromASIN: asin) {
-            pendingAmazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
+            amazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
             onISBNDetected(isbn)
             return
         }
@@ -98,12 +102,18 @@ final class PreCheckViewModel: ObservableObject {
         amazonURLCheckTask = Task {
             if let titleHint = AmazonURLParser.extractTitleHint(from: url),
                let paperISBN = await paperEditionSearching.searchPaperEditionISBN(titleHint: titleHint) {
-                pendingAmazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
+                amazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
                 onISBNDetected(paperISBN)
             } else {
                 scanState = .error("Kindle版の場合は紙の本の商品ページのURLを貼り付けてください")
             }
         }
+    }
+
+    /// 「Amazonで見る」ボタン等から、ユーザーが明示的にAmazonへ戻りたい場合に呼び出す。
+    func openAmazonReturnURL() {
+        guard let amazonReturnURL else { return }
+        amazonRedirectURL = IdentifiableURL(url: amazonReturnURL)
     }
 
     /// 未登録の本を気になるリストへ登録し、次のスキャンへ進む。
@@ -136,8 +146,6 @@ final class PreCheckViewModel: ObservableObject {
     private var lastISBN: String?
     /// テストからメタデータ取得の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
     private(set) var enrichmentTask: Task<Void, Never>?
-    /// AmazonのURL貼り付け経由で判定した場合の戻り先URL（次のスキャンへ進む際にamazonRedirectURLへ渡す）。
-    private var pendingAmazonReturnURL: URL?
 
     private func resetForNextScan() {
         enrichmentTask?.cancel()
@@ -147,10 +155,7 @@ final class PreCheckViewModel: ObservableObject {
         lastISBN = nil
         enrichedContext = EnrichedContext()
         scanState = .scanning
-        if let pendingAmazonReturnURL {
-            amazonRedirectURL = IdentifiableURL(url: pendingAmazonReturnURL)
-        }
-        pendingAmazonReturnURL = nil
+        amazonReturnURL = nil
     }
 
     private func onISBNDetected(_ isbn: String) {
