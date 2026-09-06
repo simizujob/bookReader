@@ -265,4 +265,115 @@ final class PreCheckViewModelTests: XCTestCase {
         viewModel.judge(isbn: "9788888888888")
         XCTAssertEqual(viewModel.enrichedContext.title, "ISBN: 9788888888888")
     }
+
+    // MARK: - checkAmazonURL（AmazonのURL貼り付け経由での判定）
+
+    func test_checkAmazonURL_validISBNAmazonURL_judgesSameAsCameraScan() {
+        let repository = MockBookRepository()
+        let book = Book(
+            id: UUID(), isbn: "9784088851303", title: "ONE PIECE 1", seriesName: "ONE PIECE",
+            seriesKey: "onepiece", volumeNumber: 1, coverImageURL: nil, status: .owned,
+            readStatus: .unread, registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        )
+        repository.seed(book)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        // 4088851307 は妥当なISBN-10チェックディジットを持ち、ISBN-13は9784088851303になる
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
+
+        XCTAssertEqual(viewModel.scanState, .judged(.owned(book)))
+    }
+
+    func test_checkAmazonURL_unrecognizedURL_setsError() {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/s?k=ONE+PIECE")
+
+        XCTAssertEqual(viewModel.scanState, .error("AmazonのURLとして認識できませんでした"))
+    }
+
+    /// カメラでのスキャン経由（judge(isbn:)）の場合は、次へ進んでもAmazonへの
+    /// 自動リダイレクトは発生しないこと（戻り先のAmazonページが無いため）。
+    func test_judge_cameraPath_doesNotSetAmazonRedirectURL() {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.judge(isbn: "9789999999999")
+        viewModel.skipAndContinueScanning()
+
+        XCTAssertNil(viewModel.amazonRedirectURL)
+    }
+
+    /// AmazonのURL貼り付け経由の場合は、結果を確認して次へ進むタイミングで
+    /// アフィリエイトタグ付きのURLへ自動的にリダイレクトすること。
+    func test_checkAmazonURL_notOwned_afterSkip_setsAmazonRedirectURLWithTag() throws {
+        let repository = MockBookRepository()
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
+        XCTAssertNil(viewModel.amazonRedirectURL, "結果を確認する前にリダイレクトが発生しないこと")
+
+        viewModel.skipAndContinueScanning()
+
+        let redirectURL = try XCTUnwrap(viewModel.amazonRedirectURL?.url)
+        let components = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)!
+        XCTAssertEqual(components.path, "/dp/4088851307")
+        XCTAssertNotNil(components.queryItems?.first { $0.name == "tag" }?.value)
+    }
+
+    func test_checkAmazonURL_ownedResult_afterContinueScanning_setsAmazonRedirectURL() throws {
+        let repository = MockBookRepository()
+        let book = Book(
+            id: UUID(), isbn: "9784088851303", title: "ONE PIECE 1", seriesName: "ONE PIECE",
+            seriesKey: "onepiece", volumeNumber: 1, coverImageURL: nil, status: .owned,
+            readStatus: .unread, registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        )
+        repository.seed(book)
+        let viewModel = PreCheckViewModel(bookRepository: repository, metadataService: MockOpenLibraryService())
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/dp/4088851307")
+        viewModel.continueScanning()
+
+        XCTAssertNotNil(viewModel.amazonRedirectURL)
+    }
+
+    /// 回帰テスト: Kindle版商品ページのASIN（例: "B0872SGFKK"）はISBNとして無効なため、
+    /// URLから推測したタイトルで紙の本を再検索し、見つかればそちらのISBNで判定を続行すること。
+    func test_checkAmazonURL_kindleASIN_paperEditionFound_judgesUsingPaperISBN() async throws {
+        let repository = MockBookRepository()
+        let paperSearch = MockPaperEditionSearching()
+        paperSearch.isbnByTitleHint["プラチナデータ"] = "9784344421064"
+        let book = Book(
+            id: UUID(), isbn: "9784344421064", title: "プラチナデータ", seriesName: nil,
+            seriesKey: nil, volumeNumber: nil, coverImageURL: nil, status: .owned,
+            readStatus: .unread, registeredAt: Date(), lastOpenedAt: nil, metadataFetched: true
+        )
+        repository.seed(book)
+        let viewModel = PreCheckViewModel(
+            bookRepository: repository,
+            metadataService: MockOpenLibraryService(),
+            paperEditionSearching: paperSearch
+        )
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/プラチナデータ-幻冬舎文庫-東野圭吾-ebook/dp/B0872SGFKK")
+        await viewModel.amazonURLCheckTask?.value
+
+        XCTAssertEqual(viewModel.scanState, .judged(.owned(book)))
+    }
+
+    func test_checkAmazonURL_kindleASIN_paperEditionNotFound_setsError() async throws {
+        let repository = MockBookRepository()
+        let paperSearch = MockPaperEditionSearching() // 何も登録しない = 見つからない
+        let viewModel = PreCheckViewModel(
+            bookRepository: repository,
+            metadataService: MockOpenLibraryService(),
+            paperEditionSearching: paperSearch
+        )
+
+        viewModel.checkAmazonURL("https://www.amazon.co.jp/プラチナデータ-幻冬舎文庫-東野圭吾-ebook/dp/B0872SGFKK")
+        await viewModel.amazonURLCheckTask?.value
+
+        XCTAssertEqual(viewModel.scanState, .error("Kindle版の場合は紙の本の商品ページのURLを貼り付けてください"))
+    }
 }

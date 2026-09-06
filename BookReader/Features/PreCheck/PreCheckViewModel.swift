@@ -35,6 +35,10 @@ final class PreCheckViewModel: ObservableObject {
     @Published private(set) var isLoadingMetadata = false
     @Published private(set) var enrichedContext = EnrichedContext()
     @Published var showManualSearch = false
+    /// AmazonのURL貼り付け経由で判定した場合、判定終了後にここへタグ付きURLをセットする。
+    /// ViewはこれをSafariViewの.sheet(item:)で開き、Amazonのアプリへ横取りされずCookieベースの
+    /// アフィリエイト計測を確実にする（カメラでのスキャン経由の場合は戻り先が無いためnilのまま）。
+    @Published var amazonRedirectURL: IdentifiableURL?
 
     private var consecutiveDetectionFailures = 0
     private let failureThresholdForManualSearch = 5
@@ -42,15 +46,21 @@ final class PreCheckViewModel: ObservableObject {
     private let barcodeScanService: BarcodeScanning
     private let bookRepository: BookRepository
     private let metadataService: BookMetadataFetching
+    private let paperEditionSearching: PaperEditionSearching
+    private let affiliateLinkService: AffiliateLinking
 
     init(
         barcodeScanService: BarcodeScanning = BarcodeScanService(),
         bookRepository: BookRepository,
-        metadataService: BookMetadataFetching = CompositeBookMetadataService()
+        metadataService: BookMetadataFetching = CompositeBookMetadataService(),
+        paperEditionSearching: PaperEditionSearching = NDLSearchService(),
+        affiliateLinkService: AffiliateLinking = AffiliateLinkService()
     ) {
         self.barcodeScanService = barcodeScanService
         self.bookRepository = bookRepository
         self.metadataService = metadataService
+        self.paperEditionSearching = paperEditionSearching
+        self.affiliateLinkService = affiliateLinkService
     }
 
     func handleCapturedFrame(_ pixelBuffer: CVPixelBuffer) {
@@ -64,6 +74,36 @@ final class PreCheckViewModel: ObservableObject {
     /// テスト・手動検索経由など、ISBNが既に分かっている場合の判定エントリポイント
     func judge(isbn: String) {
         onISBNDetected(isbn)
+    }
+
+    /// カメラでの読み取りに加え、AmazonのURLを直接貼り付けても判定できるようにする入り口。
+    /// Kindle版等でASINがISBNとして無効な場合は、URLから推測したタイトルで紙の本を再検索する
+    /// （共有シート拡張機能のShareExtensionViewModelと同じロジック）。
+    private(set) var amazonURLCheckTask: Task<Void, Never>?
+
+    func checkAmazonURL(_ text: String) {
+        guard case .scanning = scanState else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), let asin = AmazonURLParser.extractASIN(from: url) else {
+            scanState = .error("AmazonのURLとして認識できませんでした")
+            return
+        }
+
+        if let isbn = ISBNConverter.isbn13(fromASIN: asin) {
+            pendingAmazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
+            onISBNDetected(isbn)
+            return
+        }
+
+        amazonURLCheckTask = Task {
+            if let titleHint = AmazonURLParser.extractTitleHint(from: url),
+               let paperISBN = await paperEditionSearching.searchPaperEditionISBN(titleHint: titleHint) {
+                pendingAmazonReturnURL = affiliateLinkService.amazonProductURL(asin: asin)
+                onISBNDetected(paperISBN)
+            } else {
+                scanState = .error("Kindle版の場合は紙の本の商品ページのURLを貼り付けてください")
+            }
+        }
     }
 
     /// 未登録の本を気になるリストへ登録し、次のスキャンへ進む。
@@ -96,13 +136,21 @@ final class PreCheckViewModel: ObservableObject {
     private var lastISBN: String?
     /// テストからメタデータ取得の非同期完了を待ち合わせるために公開している（本番コードからは未使用）。
     private(set) var enrichmentTask: Task<Void, Never>?
+    /// AmazonのURL貼り付け経由で判定した場合の戻り先URL（次のスキャンへ進む際にamazonRedirectURLへ渡す）。
+    private var pendingAmazonReturnURL: URL?
 
     private func resetForNextScan() {
         enrichmentTask?.cancel()
         enrichmentTask = nil
+        amazonURLCheckTask?.cancel()
+        amazonURLCheckTask = nil
         lastISBN = nil
         enrichedContext = EnrichedContext()
         scanState = .scanning
+        if let pendingAmazonReturnURL {
+            amazonRedirectURL = IdentifiableURL(url: pendingAmazonReturnURL)
+        }
+        pendingAmazonReturnURL = nil
     }
 
     private func onISBNDetected(_ isbn: String) {

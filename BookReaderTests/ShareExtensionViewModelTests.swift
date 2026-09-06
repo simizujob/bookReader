@@ -1,7 +1,7 @@
 import XCTest
 @testable import BookReader
 
-private final class MockPaperEditionSearching: PaperEditionSearching {
+final class MockPaperEditionSearching: PaperEditionSearching {
     var isbnByTitleHint: [String: String] = [:]
     private(set) var searchedTitleHints: [String] = []
 

@@ -7,6 +7,8 @@ struct PreCheckView: View {
     /// カメラに集中していてスキャン完了に気づけない、というフィードバックを受けての対応。
     /// 判定が確定した瞬間にカメラ映像の枠を光らせ、触感フィードバックも合わせて返す。
     @State private var scanFlashOpacity: Double = 0
+    /// カメラでのバーコード読み取りに加え、AmazonのURLを直接貼り付けても判定できるようにする。
+    @State private var amazonURLText = ""
 
     init(bookRepository: BookRepository) {
         _viewModel = StateObject(wrappedValue: PreCheckViewModel(bookRepository: bookRepository))
@@ -43,7 +45,16 @@ struct PreCheckView: View {
                     return
                 }
             }
+            .sheet(item: $viewModel.amazonRedirectURL) { identifiableURL in
+                SafariView(url: identifiableURL.url)
+            }
         }
+    }
+
+    private func submitAmazonURL() {
+        guard !amazonURLText.isEmpty else { return }
+        viewModel.checkAmazonURL(amazonURLText)
+        amazonURLText = ""
     }
 
     private func flashScanCompletion() {
@@ -80,8 +91,11 @@ struct PreCheckView: View {
     private var resultSection: some View {
         switch viewModel.scanState {
         case .scanning:
-            Text("本のバーコードにカメラをかざしてください")
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("本のバーコードにカメラをかざしてください")
+                    .foregroundStyle(.secondary)
+                amazonURLEntrySection
+            }
         case .error(let message):
             VStack(alignment: .leading, spacing: 8) {
                 Text(message).foregroundStyle(.red)
@@ -89,6 +103,24 @@ struct PreCheckView: View {
             }
         case .judged(let result):
             judgedResult(result)
+        }
+    }
+
+    /// カメラでの読み取りが難しい場合や、Amazonでたまたま見ている本を確認したい場合の入り口。
+    /// カメラ・URL貼り付けのどちらで先に本の情報が得られても、同じ判定結果を表示する。
+    private var amazonURLEntrySection: some View {
+        HStack(spacing: 8) {
+            TextField("AmazonのURLを貼り付け", text: $amazonURLText)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .onSubmit(submitAmazonURL)
+            Button("確認") {
+                submitAmazonURL()
+            }
+            .buttonStyle(.bordered)
+            .disabled(amazonURLText.isEmpty)
         }
     }
 
