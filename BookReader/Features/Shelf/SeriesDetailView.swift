@@ -92,12 +92,14 @@ struct SeriesDetailView: View {
                     .buttonStyle(.borderedProminent)
                 }
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section("巻ごとのステータス") {
                 ForEach(series.volumes) { entry in
                     volumeRow(entry)
                 }
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section {
                 Button("シリーズの不具合を報告") {
@@ -108,13 +110,17 @@ struct SeriesDetailView: View {
                     }
                 }
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section {
                 Button("シリーズを削除する", role: .destructive) {
                     showDeleteConfirm = true
                 }
             }
+            .listRowBackground(Color("CardSurface"))
         }
+        .scrollContentBackground(.hidden)
+        .background(Color("AppBackground"))
         .navigationTitle(series.seriesName)
         .alert("メールが設定されていません", isPresented: $showMailUnavailableAlert) {
             Button("OK", role: .cancel) {}

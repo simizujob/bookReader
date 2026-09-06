@@ -22,6 +22,8 @@ struct ScanRegisterView: View {
                 Spacer()
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color("AppBackground"))
             .navigationTitle("本棚に登録")
             .safeAreaInset(edge: .bottom) {
                 scannedBookFooter
@@ -102,9 +104,9 @@ struct ScanRegisterView: View {
     private func resultCard(for result: ScanRegisterViewModel.RegisterResult) -> some View {
         switch result {
         case .registered:
-            resultCardView(title: "本棚に登録しました", tint: .green, systemImage: "checkmark.circle.fill")
+            resultCardView(title: "本棚に登録しました", tint: .accentColor, systemImage: "checkmark.circle.fill")
         case .upgradedFromWishlist:
-            resultCardView(title: "気になるリストから購入済みへ更新しました", tint: .green, systemImage: "checkmark.circle.fill")
+            resultCardView(title: "気になるリストから購入済みへ更新しました", tint: .accentColor, systemImage: "checkmark.circle.fill")
         case .alreadyOwned:
             resultCardView(title: "既に登録済みです", tint: .secondary, systemImage: "info.circle")
         }

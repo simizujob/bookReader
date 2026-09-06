@@ -23,20 +23,36 @@ struct ShelfView: View {
                 List {
                     ForEach(viewModel.displayedItems) { item in
                         row(for: item)
+                            .listRowBackground(Color("CardSurface"))
                     }
                     if viewModel.displayedItems.isEmpty {
-                        ContentUnavailableView(
-                            viewModel.searchText.isEmpty ? "本棚は空です" : "見つかりませんでした",
-                            systemImage: "books.vertical",
-                            description: Text(
+                        ContentUnavailableView {
+                            Label(
+                                viewModel.searchText.isEmpty ? "本棚は空です" : "見つかりませんでした",
+                                systemImage: "books.vertical"
+                            )
+                        } description: {
+                            Text(
                                 viewModel.searchText.isEmpty
-                                    ? "「買う前チェック」や右上の＋から本を登録すると、ここに表示されます。"
+                                    ? "「買う前チェック」タブでバーコードを読み取るか、下のボタンから持っている本を登録できます。"
                                     : "検索条件を変えてお試しください。"
                             )
-                        )
+                        } actions: {
+                            if viewModel.searchText.isEmpty {
+                                Button {
+                                    showScanRegister = true
+                                } label: {
+                                    Label("本を登録する", systemImage: "plus")
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color("AppBackground"))
                 .refreshable { await viewModel.refreshSeriesVolumeCounts() }
                 .searchable(text: $viewModel.searchText, prompt: "タイトル・シリーズ名で検索")
 
@@ -62,8 +78,9 @@ struct ShelfView: View {
                     Button {
                         showScanRegister = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("登録", systemImage: "plus")
                     }
+                    .buttonStyle(.borderedProminent)
                     .accessibilityLabel("本棚に登録")
                 }
             }

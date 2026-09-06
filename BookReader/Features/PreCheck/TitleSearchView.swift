@@ -46,9 +46,12 @@ struct TitleSearchView: View {
                                 }
                             }
                         }
+                        .listRowBackground(Color("CardSurface"))
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color("AppBackground"))
             .searchable(text: $searchText, prompt: "タイトルで検索")
             .onSubmit(of: .search) {
                 debounceTask?.cancel()

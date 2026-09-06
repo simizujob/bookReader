@@ -28,6 +28,7 @@ struct BookDetailView: View {
                 )
                 .keyboardType(.numberPad)
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section("ステータス") {
                 Picker("所持ステータス", selection: $viewModel.editableStatus) {
@@ -40,6 +41,7 @@ struct BookDetailView: View {
                     Text("読了").tag(ReadStatus.finished)
                 }
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section {
                 Button("不具合を報告") {
@@ -50,13 +52,17 @@ struct BookDetailView: View {
                     }
                 }
             }
+            .listRowBackground(Color("CardSurface"))
 
             Section {
                 Button("削除する", role: .destructive) {
                     viewModel.showDeleteConfirm = true
                 }
             }
+            .listRowBackground(Color("CardSurface"))
         }
+        .scrollContentBackground(.hidden)
+        .background(Color("AppBackground"))
         .navigationTitle("本の詳細")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

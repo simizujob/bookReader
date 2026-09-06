@@ -40,6 +40,8 @@ struct PreCheckView: View {
                 Spacer()
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color("AppBackground"))
             .navigationTitle("買う前チェック")
             // 「どの本を読み取ったか」を画面下部に常時表示する
             .safeAreaInset(edge: .bottom) {
@@ -160,7 +162,7 @@ struct PreCheckView: View {
         switch result {
         case .owned:
             VStack(alignment: .leading, spacing: 8) {
-                resultCard(title: "持っています", subtitle: nil, tint: .green, systemImage: "checkmark.circle.fill")
+                resultCard(title: "持っています", subtitle: nil, tint: .accentColor, systemImage: "checkmark.circle.fill")
                 HStack(spacing: 12) {
                     continueScanningButton
                     amazonViewButtonIfAvailable
