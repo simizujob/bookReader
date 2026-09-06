@@ -9,6 +9,8 @@ struct PreCheckView: View {
     @State private var scanFlashOpacity: Double = 0
     /// カメラでのバーコード読み取りに加え、AmazonのURLを直接貼り付けても判定できるようにする。
     @State private var amazonURLText = ""
+    /// Amazonを開いていなくても、タイトルだけで買う前チェックできるようにする入り口。
+    @State private var showTitleSearch = false
 
     init(bookRepository: BookRepository) {
         _viewModel = StateObject(wrappedValue: PreCheckViewModel(bookRepository: bookRepository))
@@ -20,9 +22,10 @@ struct PreCheckView: View {
                 cameraSection
                 resultSection
                 if viewModel.showManualSearch {
-                    Text("うまく読み取れない場合は手動検索をお試しください")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Button("うまく読み取れない場合はタイトルで検索") {
+                        showTitleSearch = true
+                    }
+                    .font(.footnote)
                 }
                 Spacer()
             }
@@ -47,6 +50,11 @@ struct PreCheckView: View {
             }
             .sheet(item: $viewModel.amazonRedirectURL) { identifiableURL in
                 SafariView(url: identifiableURL.url)
+            }
+            .sheet(isPresented: $showTitleSearch) {
+                TitleSearchView { isbn in
+                    viewModel.judge(isbn: isbn)
+                }
             }
         }
     }
@@ -107,20 +115,26 @@ struct PreCheckView: View {
     }
 
     /// カメラでの読み取りが難しい場合や、Amazonでたまたま見ている本を確認したい場合の入り口。
-    /// カメラ・URL貼り付けのどちらで先に本の情報が得られても、同じ判定結果を表示する。
+    /// カメラ・URL貼り付け・タイトル検索のいずれで先に本の情報が得られても、同じ判定結果を表示する。
     private var amazonURLEntrySection: some View {
-        HStack(spacing: 8) {
-            TextField("AmazonのURLを貼り付け", text: $amazonURLText)
-                .textFieldStyle(.roundedBorder)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .onSubmit(submitAmazonURL)
-            Button("確認") {
-                submitAmazonURL()
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("AmazonのURLを貼り付け", text: $amazonURLText)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit(submitAmazonURL)
+                Button("確認") {
+                    submitAmazonURL()
+                }
+                .buttonStyle(.bordered)
+                .disabled(amazonURLText.isEmpty)
             }
-            .buttonStyle(.bordered)
-            .disabled(amazonURLText.isEmpty)
+            Button("タイトルで検索する") {
+                showTitleSearch = true
+            }
+            .font(.footnote)
         }
     }
 

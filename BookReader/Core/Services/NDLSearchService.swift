@@ -13,6 +13,19 @@ protocol PaperEditionSearching {
     func searchPaperEditionISBN(titleHint: String) async -> String?
 }
 
+/// タイトルの手掛かりを1件のISBNへ自動確定せず、候補を複数返してユーザーに選ばせる窓口。
+/// 買う前チェック画面のタイトル検索（Amazonを開かずに本のタイトルだけで判定したい場合）で使用する。
+struct TitleSearchCandidate: Equatable, Identifiable {
+    let isbn: String
+    let title: String
+    let creator: String?
+    var id: String { isbn }
+}
+
+protocol TitleSearching {
+    func searchCandidates(title: String) async -> [TitleSearchCandidate]
+}
+
 /// 国立国会図書館サーチ（https://ndlsearch.ndl.go.jp/）連携。
 /// 国内で出版される書籍は国立国会図書館法により納本が義務付けられているため、
 /// openBD・Open Libraryよりもさらに網羅性が高い（無料・APIキー不要）。
@@ -22,7 +35,7 @@ protocol PaperEditionSearching {
 /// 巻数の表記はNDL内でも統一されておらず多数のバリエーションが存在する（NDLVolumeParser参照）。
 /// 安全と判断できるパターンのみを許可リスト化し、それ以外は「不明」として扱う
 /// ベストエフォート方針を採る（要件定義書14章・詳細設計書9章参照）。
-final class NDLSearchService: BookMetadataFetching, PaperEditionSearching {
+final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, TitleSearching {
     private let session: URLSession
 
     init(session: URLSession? = nil) {
@@ -178,6 +191,29 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching {
         return best.isbn
     }
 
+    /// タイトルで検索し、ISBNが分かる候補を返す（重複ISBNは除外、最大20件）。
+    /// Amazonを開かず、思い出したタイトルだけで買う前チェックしたい場合に使用する。
+    /// 表紙画像は提供されないため、著者名を添えてユーザーが候補を見分けられるようにする。
+    func searchCandidates(title: String) async -> [TitleSearchCandidate] {
+        guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
+            return []
+        }
+        components.queryItems = [
+            URLQueryItem(name: "title", value: title),
+            URLQueryItem(name: "cnt", value: "20")
+        ]
+        guard let url = components.url, let data = try? await fetchData(from: url) else { return [] }
+
+        var seenISBNs: Set<String> = []
+        var results: [TitleSearchCandidate] = []
+        for item in NDLResponseParser().parseAll(data) where item.isBook {
+            guard let isbn = item.isbn, let itemTitle = item.title, !seenISBNs.contains(isbn) else { continue }
+            seenISBNs.insert(isbn)
+            results.append(TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator))
+        }
+        return results
+    }
+
     /// 1から連番で途切れずに存在する最大値を返す（例: {1,2,3,5,6} → 3）。1が無ければnil。
     private static func longestConsecutiveRun(from volumes: Set<Int>) -> Int? {
         guard volumes.contains(1) else { return nil }
@@ -222,6 +258,7 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
         var title: String?
         var volume: String?
         var isbn: String?
+        var creator: String?
         var categories: [String] = []
 
         /// 紙・電子の「本」であることを示す。アニメ円盤（映像資料）やCD（録音資料）等、
@@ -286,6 +323,8 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
         switch elementName {
         case "dc:title":
             if currentItem.title == nil { currentItem.title = text }
+        case "dc:creator":
+            if currentItem.creator == nil { currentItem.creator = text }
         case "dcndl:volume":
             currentItem.volume = text
         case "dc:identifier":

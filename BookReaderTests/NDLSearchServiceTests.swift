@@ -215,6 +215,7 @@ final class NDLSearchServiceTests: XCTestCase {
         let volume: String?
         var categories: [String] = ["図書", "紙"]
         var isbn: String? = nil
+        var creator: String? = nil
     }
 
     private func makeSeriesSearchXML(items: [FixtureItem]) -> String {
@@ -224,7 +225,8 @@ final class NDLSearchServiceTests: XCTestCase {
             let isbnTag = item.isbn.map {
                 "<dc:identifier xsi:type=\"dcndl:ISBN\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\($0)</dc:identifier>"
             } ?? ""
-            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)\(isbnTag)</item>"
+            let creatorTag = item.creator.map { "<dc:creator>\($0)</dc:creator>" } ?? ""
+            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)\(isbnTag)\(creatorTag)</item>"
         }.joined()
         return """
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
@@ -434,6 +436,56 @@ final class NDLSearchServiceTests: XCTestCase {
 
         let result = try await service.fetchSeriesVolumeCount(seriesName: "ゴールデンカムイ")
         XCTAssertEqual(result?.total, 10, "「巻」付き表記が存在しないタイトルでは裸数字+副題表記を除外しないこと")
+    }
+
+    // MARK: - searchCandidates（タイトルだけで検索し、候補をユーザーに選ばせる）
+
+    func test_searchCandidates_returnsCandidatesWithCreator() async throws {
+        let items = [
+            FixtureItem(title: "鬼滅の刃 1", volume: "1", isbn: "9784088801955", creator: "吾峠, 呼世晴"),
+            FixtureItem(title: "鬼滅の刃 2", volume: "2", isbn: "9784088801962", creator: "吾峠, 呼世晴")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+
+        XCTAssertEqual(candidates.count, 2)
+        XCTAssertEqual(candidates.first?.isbn, "9784088801955")
+        XCTAssertEqual(candidates.first?.title, "鬼滅の刃 1")
+        XCTAssertEqual(candidates.first?.creator, "吾峠, 呼世晴")
+    }
+
+    func test_searchCandidates_deduplicatesByISBN() async throws {
+        // NDLは同一ISBNに対し新旧複数レコードを重複して持つことがある
+        let items = [
+            FixtureItem(title: "三体", volume: nil, isbn: "9784041061059"),
+            FixtureItem(title: "三体", volume: nil, isbn: "9784041061059")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "三体")
+
+        XCTAssertEqual(candidates.count, 1)
+    }
+
+    func test_searchCandidates_excludesItemsWithoutISBN() async throws {
+        let items = [FixtureItem(title: "ISBN不明の本", volume: nil, isbn: nil)]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "ISBN不明の本")
+
+        XCTAssertTrue(candidates.isEmpty)
+    }
+
+    func test_searchCandidates_excludesNonBookCategoryItems() async throws {
+        let items = [
+            FixtureItem(title: "アニメ円盤", volume: nil, categories: ["映像資料", "記録メディア"], isbn: "9784000000001")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "アニメ円盤")
+
+        XCTAssertTrue(candidates.isEmpty)
     }
 
     // MARK: - searchPaperEditionISBN（Kindle版ASIN等、ISBN変換に失敗した場合の紙の本再検索）
