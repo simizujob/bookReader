@@ -216,6 +216,7 @@ final class NDLSearchServiceTests: XCTestCase {
         var categories: [String] = ["図書", "紙"]
         var isbn: String? = nil
         var creator: String? = nil
+        var titleTranscription: String? = nil
     }
 
     private func makeSeriesSearchXML(items: [FixtureItem]) -> String {
@@ -226,7 +227,8 @@ final class NDLSearchServiceTests: XCTestCase {
                 "<dc:identifier xsi:type=\"dcndl:ISBN\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\($0)</dc:identifier>"
             } ?? ""
             let creatorTag = item.creator.map { "<dc:creator>\($0)</dc:creator>" } ?? ""
-            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)\(isbnTag)\(creatorTag)</item>"
+            let transcriptionTag = item.titleTranscription.map { "<dcndl:titleTranscription>\($0)</dcndl:titleTranscription>" } ?? ""
+            return "<item><dc:title>\(item.title)</dc:title>\(volumeTag)\(categoryTags)\(isbnTag)\(creatorTag)\(transcriptionTag)</item>"
         }.joined()
         return """
         <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" version="2.0">
@@ -486,6 +488,53 @@ final class NDLSearchServiceTests: XCTestCase {
         let candidates = await service.searchCandidates(title: "アニメ円盤")
 
         XCTAssertTrue(candidates.isEmpty)
+    }
+
+    /// 回帰テスト: ユーザーからのフィードバック。"ONE PIECE"（ローマ字表記）をカタカナ読み
+    /// "ワンピース"で検索すると、たまたま「ワンピース」という語を含むだけの無関係な商品
+    /// （婦人服等）が先に埋もれさせてしまっていた。タイトルの読み仮名（titleTranscription）
+    /// による完全一致を、単なる部分一致より上位に並べること。
+    func test_searchCandidates_ranksTranscriptionExactMatchAboveUnrelatedSubstringMatch() async throws {
+        let items = [
+            FixtureItem(
+                title: "あーたんのワンピース", volume: nil, isbn: "9784000000099"
+            ),
+            FixtureItem(
+                title: "ONE PIECE", volume: "1", isbn: "9784088725093", titleTranscription: "ワン ピース"
+            )
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "ワンピース")
+
+        XCTAssertEqual(candidates.first?.isbn, "9784088725093", "読み仮名が完全一致する本来の作品を最上位にすること")
+    }
+
+    /// 前方一致は部分一致より上位に来ること（例: "鬼滅の刃"で検索した際、"鬼滅の刃 1"のような
+    /// 本来欲しい巻が、たまたま途中に含むだけの無関係な本より上位に来る）。
+    func test_searchCandidates_prefixMatchRanksAboveSubstringMatch() async throws {
+        let items = [
+            FixtureItem(title: "○○と学ぶ鬼滅の刃の世界", volume: nil, isbn: "9784000000001"),
+            FixtureItem(title: "鬼滅の刃 1", volume: "1", isbn: "9784088801955")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+
+        XCTAssertEqual(candidates.first?.isbn, "9784088801955")
+    }
+
+    /// クエリと全く関連の無いタイトルは候補から除外すること。
+    func test_searchCandidates_excludesUnrelatedTitles() async throws {
+        let items = [
+            FixtureItem(title: "全く関係の無い専門書のタイトル", volume: nil, isbn: "9784000000002"),
+            FixtureItem(title: "鬼滅の刃 1", volume: "1", isbn: "9784088801955")
+        ]
+        let service = makeService(xml: makeSeriesSearchXML(items: items))
+
+        let candidates = await service.searchCandidates(title: "鬼滅の刃")
+
+        XCTAssertEqual(candidates.map(\.isbn), ["9784088801955"])
     }
 
     // MARK: - searchPaperEditionISBN（Kindle版ASIN等、ISBN変換に失敗した場合の紙の本再検索）

@@ -191,27 +191,56 @@ final class NDLSearchService: BookMetadataFetching, PaperEditionSearching, Title
         return best.isbn
     }
 
-    /// タイトルで検索し、ISBNが分かる候補を返す（重複ISBNは除外、最大20件）。
+    /// 明らかに無関係と判断して除外する関連度スコアの下限。
+    private static let minimumTitleSearchRelevance = 0.3
+
+    /// タイトルで検索し、ISBNが分かる候補を関連度の高い順に返す（重複ISBNは除外）。
     /// Amazonを開かず、思い出したタイトルだけで買う前チェックしたい場合に使用する。
     /// 表紙画像は提供されないため、著者名を添えてユーザーが候補を見分けられるようにする。
+    ///
+    /// 実機で確認: NDLのタイトル検索は素朴なキーワード一致に近く、「ワンピース」で検索すると
+    /// 本来欲しいONE PIECE（漫画）よりも、たまたま「ワンピース」という語を含む無関係な商品
+    /// （婦人服等）が先に出てきて埋もれてしまう不具合があった。単純な文字列一致だけでなく、
+    /// 完全一致／前方一致を優先したスコアリングで並べ替える。また、"ONE PIECE"のように
+    /// タイトルがローマ字表記の作品をカタカナ読み（「ワンピース」）で検索した場合にも
+    /// 対応できるよう、dcndl:titleTranscription（読み仮名）も照合対象に含める。
     func searchCandidates(title: String) async -> [TitleSearchCandidate] {
         guard var components = URLComponents(string: "https://ndlsearch.ndl.go.jp/api/opensearch") else {
             return []
         }
         components.queryItems = [
             URLQueryItem(name: "title", value: title),
-            URLQueryItem(name: "cnt", value: "20")
+            URLQueryItem(name: "cnt", value: "30")
         ]
         guard let url = components.url, let data = try? await fetchData(from: url) else { return [] }
 
         var seenISBNs: Set<String> = []
-        var results: [TitleSearchCandidate] = []
+        var scored: [(candidate: TitleSearchCandidate, score: Double)] = []
         for item in NDLResponseParser().parseAll(data) where item.isBook {
             guard let isbn = item.isbn, let itemTitle = item.title, !seenISBNs.contains(isbn) else { continue }
             seenISBNs.insert(isbn)
-            results.append(TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator))
+            let score = Self.relevanceScore(query: title, title: itemTitle, titleTranscription: item.titleTranscription)
+            guard score >= Self.minimumTitleSearchRelevance else { continue }
+            scored.append((TitleSearchCandidate(isbn: isbn, title: itemTitle, creator: item.creator), score))
         }
-        return results
+        return scored.sorted { $0.score > $1.score }.map(\.candidate)
+    }
+
+    /// クエリと候補タイトルの関連度（0〜1、1が完全一致）。タイトル・読み仮名のうち
+    /// より良い一致を採用する。完全一致＞前方一致＞部分一致＞あいまい一致の順に評価を下げる
+    /// ことで、たまたま検索語を含むだけの無関係な商品がクエリに近い作品より上位に来ないようにする。
+    private static func relevanceScore(query: String, title: String, titleTranscription: String?) -> Double {
+        [title, titleTranscription].compactMap { $0 }.map { matchScore(query: query, against: $0) }.max() ?? 0
+    }
+
+    private static func matchScore(query: String, against text: String) -> Double {
+        let normalizedQuery = TitleMatcher.normalize(query)
+        let normalizedText = TitleMatcher.normalize(text)
+        guard !normalizedQuery.isEmpty, !normalizedText.isEmpty else { return 0 }
+        if normalizedText == normalizedQuery { return 1.0 }
+        if normalizedText.hasPrefix(normalizedQuery) { return 0.9 }
+        if normalizedText.contains(normalizedQuery) { return 0.6 }
+        return TitleMatcher.similarity(query, text) * 0.5
     }
 
     /// 1から連番で途切れずに存在する最大値を返す（例: {1,2,3,5,6} → 3）。1が無ければnil。
@@ -259,6 +288,9 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
         var volume: String?
         var isbn: String?
         var creator: String?
+        /// タイトルの読み仮名。"ONE PIECE"のようにローマ字表記のタイトルをカタカナ読み
+        /// （"ワンピース"）で検索した場合の一致判定に使う（タイトル検索の関連度スコアリング参照）。
+        var titleTranscription: String?
         var categories: [String] = []
 
         /// 紙・電子の「本」であることを示す。アニメ円盤（映像資料）やCD（録音資料）等、
@@ -325,6 +357,8 @@ final class NDLResponseParser: NSObject, XMLParserDelegate {
             if currentItem.title == nil { currentItem.title = text }
         case "dc:creator":
             if currentItem.creator == nil { currentItem.creator = text }
+        case "dcndl:titleTranscription":
+            if currentItem.titleTranscription == nil { currentItem.titleTranscription = text }
         case "dcndl:volume":
             currentItem.volume = text
         case "dc:identifier":

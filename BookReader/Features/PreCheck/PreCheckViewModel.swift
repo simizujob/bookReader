@@ -34,7 +34,6 @@ final class PreCheckViewModel: ObservableObject {
     @Published private(set) var scanState: ScanState = .scanning
     @Published private(set) var isLoadingMetadata = false
     @Published private(set) var enrichedContext = EnrichedContext()
-    @Published var showManualSearch = false
     /// AmazonのURL貼り付け経由で判定した場合の戻り先（タグ付き）。カメラでのスキャン経由では
     /// 戻り先が無いためnilのまま。ユーザーが明示的にopenAmazonReturnURL()を呼んだ場合のみ
     /// amazonRedirectURLへ渡り、SafariViewが開く。登録直後に自動で画面遷移すると、連続して
@@ -43,9 +42,6 @@ final class PreCheckViewModel: ObservableObject {
     /// ViewはこれをSafariViewの.sheet(item:)で開く。Amazonのアプリへ横取りされずCookieベースの
     /// アフィリエイト計測を確実にするため、SFSafariViewController（Safari自体）で開く。
     @Published var amazonRedirectURL: IdentifiableURL?
-
-    private var consecutiveDetectionFailures = 0
-    private let failureThresholdForManualSearch = 5
 
     private let barcodeScanService: BarcodeScanning
     private let bookRepository: BookRepository
@@ -68,10 +64,7 @@ final class PreCheckViewModel: ObservableObject {
     }
 
     func handleCapturedFrame(_ pixelBuffer: CVPixelBuffer) {
-        guard let isbn = try? barcodeScanService.detectISBN(in: pixelBuffer) else {
-            onDetectionFailed()
-            return
-        }
+        guard let isbn = try? barcodeScanService.detectISBN(in: pixelBuffer) else { return }
         onISBNDetected(isbn)
     }
 
@@ -163,7 +156,6 @@ final class PreCheckViewModel: ObservableObject {
         // 無視する。結果を確認する前に次々スキャンされてしまうのを防ぐための仕様変更。
         guard case .scanning = scanState else { return }
 
-        consecutiveDetectionFailures = 0
         lastISBN = isbn
         enrichedContext = EnrichedContext()
 
@@ -179,13 +171,6 @@ final class PreCheckViewModel: ObservableObject {
             // 取得に成功すればenrichAfterMetadataが正式なタイトル・表紙で上書きする。
             enrichedContext = EnrichedContext(title: "ISBN: \(isbn)")
             enrichmentTask = Task { await enrichAfterMetadata(isbn: isbn) }
-        }
-    }
-
-    private func onDetectionFailed() {
-        consecutiveDetectionFailures += 1
-        if consecutiveDetectionFailures >= failureThresholdForManualSearch {
-            showManualSearch = true
         }
     }
 

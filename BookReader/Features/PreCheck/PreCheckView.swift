@@ -18,15 +18,25 @@ struct PreCheckView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                cameraSection
-                resultSection
-                if viewModel.showManualSearch {
-                    Button("うまく読み取れない場合はタイトルで検索") {
-                        showTitleSearch = true
-                    }
-                    .font(.footnote)
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    methodLabel(number: 1, text: "カメラでスキャン")
+                    cameraSection
                 }
+                if case .scanning = viewModel.scanState {
+                    VStack(alignment: .leading, spacing: 8) {
+                        methodLabel(number: 2, text: "AmazonのURLを貼り付け")
+                        amazonURLEntrySection
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        methodLabel(number: 3, text: "タイトルで検索")
+                        Button("タイトルで検索する") {
+                            showTitleSearch = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                resultSection
                 Spacer()
             }
             .padding()
@@ -99,11 +109,8 @@ struct PreCheckView: View {
     private var resultSection: some View {
         switch viewModel.scanState {
         case .scanning:
-            VStack(alignment: .leading, spacing: 12) {
-                Text("本のバーコードにカメラをかざしてください")
-                    .foregroundStyle(.secondary)
-                amazonURLEntrySection
-            }
+            Text("本のバーコードにカメラをかざしてください")
+                .foregroundStyle(.secondary)
         case .error(let message):
             VStack(alignment: .leading, spacing: 8) {
                 Text(message).foregroundStyle(.red)
@@ -114,27 +121,37 @@ struct PreCheckView: View {
         }
     }
 
-    /// カメラでの読み取りが難しい場合や、Amazonでたまたま見ている本を確認したい場合の入り口。
-    /// カメラ・URL貼り付け・タイトル検索のいずれで先に本の情報が得られても、同じ判定結果を表示する。
+    /// 「カメラ・URL貼り付け・タイトル検索の3通りでチェックできる」ことが一目で伝わるよう、
+    /// 各入力手段に番号付きのラベルを付ける。どの手段で先に本の情報が得られても同じ判定結果を表示する。
+    private func methodLabel(number: Int, text: String) -> some View {
+        HStack(spacing: 6) {
+            Text("\(number)")
+                .font(.caption2)
+                .fontWeight(.bold)
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.accentColor))
+            Text(text)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Amazonでたまたま見ている本を確認したい場合の入り口（②）。
     private var amazonURLEntrySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("AmazonのURLを貼り付け", text: $amazonURLText)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .onSubmit(submitAmazonURL)
-                Button("確認") {
-                    submitAmazonURL()
-                }
-                .buttonStyle(.bordered)
-                .disabled(amazonURLText.isEmpty)
+        HStack(spacing: 8) {
+            TextField("AmazonのURLを貼り付け", text: $amazonURLText)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .onSubmit(submitAmazonURL)
+            Button("確認") {
+                submitAmazonURL()
             }
-            Button("タイトルで検索する") {
-                showTitleSearch = true
-            }
-            .font(.footnote)
+            .buttonStyle(.bordered)
+            .disabled(amazonURLText.isEmpty)
         }
     }
 
