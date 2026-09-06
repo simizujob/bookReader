@@ -21,6 +21,13 @@ struct ShelfView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 List {
+                    if !viewModel.displayedItems.isEmpty {
+                        Text("持っている本は右上の「＋」から登録できます")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                     ForEach(viewModel.displayedItems) { item in
                         row(for: item)
                             .listRowBackground(Color("CardSurface"))
@@ -79,6 +86,7 @@ struct ShelfView: View {
                         showScanRegister = true
                     } label: {
                         Label("登録", systemImage: "plus")
+                            .foregroundStyle(Color("AppBackground"))
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityLabel("本棚に登録")
