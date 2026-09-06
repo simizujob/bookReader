@@ -25,15 +25,15 @@ struct PreCheckView: View {
                 }
                 if case .scanning = viewModel.scanState {
                     VStack(alignment: .leading, spacing: 8) {
-                        methodLabel(number: 2, text: "AmazonのURLを貼り付け")
-                        amazonURLEntrySection
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        methodLabel(number: 3, text: "タイトルで検索")
+                        methodLabel(number: 2, text: "タイトルで検索")
                         Button("タイトルで検索する") {
                             showTitleSearch = true
                         }
                         .buttonStyle(.bordered)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        methodLabel(number: 3, text: "AmazonのURLを貼り付け")
+                        amazonURLEntrySection
                     }
                 }
                 resultSection
